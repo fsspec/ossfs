@@ -1,0 +1,43 @@
+repos:
+  - hooks:
+      - id: black
+        language_version: python3
+    repo: https://github.com/ambv/black
+    rev: 19.10b0
+  - hooks:
+      - id: isort
+        language_version: python3
+    repo: https://github.com/timothycrosley/isort
+    rev: 5.8.0
+  - hooks:
+      - id: flake8
+        language_version: python3
+        additional_dependencies:
+          - flake8-bugbear
+          - flake8-comprehensions
+          - flake8-debugger
+          - flake8-string-format
+    repo: https://gitlab.com/pycqa/flake8
+    rev: 3.9.0
+  - hooks:
+      -  id: mypy
+         language_version: python3
+         files: ^dvc/
+    repo: https://github.com/pre-commit/mirrors-mypy
+    rev: 'v0.812'
+  - repo: local
+    hooks:
+    - id: pylint
+      name: pylint
+      entry: pylint
+      language: system
+      types: [python]
+  - hooks:
+      - args:
+          - -i
+          - "2"
+        id: beautysh
+        language_version: python3
+    repo: https://github.com/lovesegfault/beautysh
+    rev: 6.0.1
+

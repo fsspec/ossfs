@@ -1,1 +1,2 @@
 fsspec==2021.04.0
+pre-commit
