@@ -1,2 +1,4 @@
-fsspec==2021.04.0
-pre-commit
+pytest==6.2.4
+pylint==2.8.2
+pylint-pytest==1.0.3
+mypy==0.812
