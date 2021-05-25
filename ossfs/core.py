@@ -13,38 +13,6 @@ from fsspec.utils import stringify_path
 logger = logging.getLogger("")
 
 
-class OSSFile(AbstractBufferedFile):
-    """A file living in OSSFileSystem"""
-
-    def _upload_chunk(self, final=False):
-        """Write one part of a multi-block file upload
-        Parameters
-        ==========
-        final: bool
-            This is the last block, so should complete file, if
-            self.autocommit is True.
-        """
-        return True
-
-    def _initiate_upload(self):
-        """ Create remote file/upload """
-
-    def _fetch_range(self, start, end):
-        """
-        Get the specified set of bytes from remote
-        Parameters
-        ==========
-        start: int
-        end: int
-        """
-
-    def commit(self):
-        """Move from temp to final destination"""
-
-    def discard(self):
-        """Throw away temporary file"""
-
-
 def _parse_oss_url(url: str) -> dict:
     """parse urls from urls
     Parameters
@@ -125,7 +93,7 @@ class OSSFileSystem(AbstractFileSystem):
         autocommit=True,
         cache_options=None,
         **kwargs,  # pylint: disable=too-many-arguments
-    ) -> OSSFile:
+    ):
         """
         Open a file for reading or writing.
         Parameters
@@ -304,7 +272,10 @@ class OSSFileSystem(AbstractFileSystem):
         bucket.delete_object(obj_name)
 
     def get_file(self, rpath, lpath, **kwargs):
-        """Copy single remote file to local"""
+        """
+        Copy single remote file to local
+        # todo optimization for file larger than 5GB
+        """
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
@@ -313,7 +284,10 @@ class OSSFileSystem(AbstractFileSystem):
             bucket.get_object_to_file(obj_name, rpath)
 
     def put_file(self, lpath, rpath, **kwargs):
-        """Copy single file to remote"""
+        """
+        Copy single file to remote
+        # todo optimization for file larger than 5GB
+        """
         if os.path.isdir(lpath):
             self.makedirs(rpath, exist_ok=True)
         else:
@@ -334,3 +308,67 @@ class OSSFileSystem(AbstractFileSystem):
         bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
         simplifiedmeta = bucket.get_object_meta(obj_name)
         return simplifiedmeta.headers["Content-Length"]
+
+    def append_object(self, path: str, value: bytes, location: int) -> int:
+        """
+        Append bytes to the object
+        """
+        endpoint, bucket_name, obj_name = self._get_path_info(path)
+        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        result = bucket.append_object(obj_name, location, value)
+        return result.next_position
+
+    def get_object(self, path: str, start: int, end: int) -> bytes:
+        """
+        Return object bytes in range
+        """
+        headers = {"x-oss-range-behavior": "standard"}
+        endpoint, bucket_name, obj_name = self._get_path_info(path)
+        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        try:
+            object_stream = bucket.get_object(
+                obj_name, byte_range=(start, end), headers=headers
+            )
+        except oss2.exceptions.ServerError as err:
+            raise err
+        return object_stream.read()
+
+
+class OSSFile(AbstractBufferedFile):
+    """A file living in OSSFileSystem"""
+
+    def _upload_chunk(self, final=False):
+        """Write one part of a multi-block file upload
+        Parameters
+        ==========
+        final: bool
+            This is the last block, so should complete file, if
+            self.autocommit is True.
+        """
+        self.location = self.fs.append_object(
+            self.path, self.location, self.buffer.getvalue()
+        )
+        return True
+
+    def _initiate_upload(self):
+        """ Create remote file/upload """
+        if "a" in self.mode:
+            self.location = self.size
+        elif "w" in self.mode:
+            # create empty file to append to
+            self.location = 0
+            self.fs.rm_file(self.path)
+
+    def _fetch_range(self, start, end):
+        """
+        Get the specified set of bytes from remote
+        Parameters
+        ==========
+        start: int
+        end: int
+        """
+        start = max(start, 0)
+        end = min(self.size, end)
+        if start >= end or start >= self.size:
+            return b""
+        return self.fs.get_object(self.path, start, end)
