@@ -3,7 +3,6 @@ Code of OSSFileSystem and OSSFile
 """
 import logging
 import os
-import re
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -11,44 +10,9 @@ import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
+from .utils import parse_oss_url
+
 logger = logging.getLogger("")
-
-
-def _parse_oss_url(url: str) -> dict:
-    """parse urls from urls
-    Parameters
-    ----------
-    path : string
-        Input path, like
-        `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
-    Examples
-    --------
-    >>> _get_kwargs_from_urls(
-        "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject")
-    {'bucket': 'mybucket', 'object': 'myobject',
-    'endpoint': 'http://oss-cn-hangzhou.aliyun.com'}
-    """
-    out = {}
-
-    parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
-    matcher = re.compile(parser_re).match(url)
-    if matcher:
-        url = matcher["path"]
-        out["endpoint"] = matcher["endpoint"]
-    else:
-        out["endpoint"] = ""
-
-    out["path"] = url
-    url = url.lstrip("/")
-    if "/" not in url:
-        bucket_name = url
-        obj_name = ""
-    else:
-        bucket_name, obj_name = url.split("/", 1)
-    out["object"] = obj_name
-    out["bucket"] = bucket_name
-
-    return out
 
 
 class OSSFileSystem(AbstractFileSystem):
@@ -148,7 +112,7 @@ class OSSFileSystem(AbstractFileSystem):
         if isinstance(path, list):
             return [cls._strip_protocol(p) for p in path]
         path = stringify_path(path)
-        path = _parse_oss_url(path)["path"]
+        path = parse_oss_url(path)["path"]
         path = path.rstrip("/")
         return path or cls.root_marker
 
@@ -168,7 +132,7 @@ class OSSFileSystem(AbstractFileSystem):
         {'path': mybucket/myobject, 'bucket': 'mybucket',
         'object': 'myobject', 'endpoint': 'http://oss-cn-hangzhou.aliyun'}
         """
-        return _parse_oss_url(path)
+        return parse_oss_url(path)
 
     def _get_path_info(self, urlpath: str) -> Tuple[str, str, str]:
         """get endpoint, bucket name and object name from urls
