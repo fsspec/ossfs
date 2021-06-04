@@ -3,14 +3,14 @@ Code of OSSFileSystem and OSSFile
 """
 import logging
 import os
+import re
+from datetime import datetime
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
-
-from .utils import parse_oss_url
 
 logger = logging.getLogger("")
 
@@ -25,10 +25,10 @@ class OSSFileSystem(AbstractFileSystem):
 
     def __init__(
         self,
-        key: Optional[str] = "",
-        secret: Optional[str] = "",
+        endpoint: str,
+        key: Optional[str] = None,
+        secret: Optional[str] = None,
         token: Optional[str] = None,
-        endpoint: Optional[str] = None,
         default_cache_type: Optional[str] = "bytes",
         **kwargs,  # pylint: disable=too-many-arguments
     ):
@@ -56,6 +56,29 @@ class OSSFileSystem(AbstractFileSystem):
         self._endpoint = endpoint
         self._default_cache_type = default_cache_type
         super().__init__(**kwargs)
+
+    def split_path(self, path: str) -> Tuple[str, str]:
+        """
+        Normalise object path string into bucket and key.
+        Parameters
+        ----------
+        path : string
+            Input path, like `/mybucket/path/to/file`
+        Examples
+        --------
+        >>> split_path("/mybucket/path/to/file")
+        ['mybucket', 'path/to/file' ]
+        >>> split_path("
+        /mybucket/path/to/versioned_file?versionId=some_version_id
+        ")
+        ['mybucket', 'path/to/versioned_file', 'some_version_id']
+        """
+        path = self._strip_protocol(path)
+        path = path.lstrip("/")
+        if "/" not in path:
+            return path, ""
+        bucket_name, obj_name = path.split("/", 1)
+        return bucket_name, obj_name
 
     def _open(
         self,
@@ -112,56 +135,16 @@ class OSSFileSystem(AbstractFileSystem):
         if isinstance(path, list):
             return [cls._strip_protocol(p) for p in path]
         path = stringify_path(path)
-        path = parse_oss_url(path)["path"]
+        parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
+        matcher = re.compile(parser_re).match(path)
+        if matcher:
+            path = path["path"]
         path = path.rstrip("/")
         return path or cls.root_marker
 
-    @staticmethod
-    def _get_kwargs_from_urls(path: str) -> dict:
-        """get arguments from urls
-        Parameters
-        ----------
-        path : string
-            Input path, like
-            `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
-        Examples
-        --------
-        >>> _get_kwargs_from_urls(
-            "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-            )
-        {'path': mybucket/myobject, 'bucket': 'mybucket',
-        'object': 'myobject', 'endpoint': 'http://oss-cn-hangzhou.aliyun'}
-        """
-        return parse_oss_url(path)
-
-    def _get_path_info(self, urlpath: str) -> Tuple[str, str, str]:
-        """get endpoint, bucket name and object name from urls
-        Parameters
-        ----------
-        path : string
-            Input path, like
-            `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
-        Examples
-        --------
-        >>> _get_kwargs_from_urls(
-            "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-            )
-        ('http://oss-cn-hangzhou.aliyun', 'mybucket',  'myobject', )
-        >>> _get_kwargs_from_urls("/mybucket/myobject")
-        (self._endpoint, 'mybucket',  'myobject', )
-        >>> _get_kwargs_from_urls("/mybucket")
-        (self._endpoint, 'mybucket', '', )
-        """
-        url_info = self._get_kwargs_from_urls(urlpath)
-        endpoint = url_info["endpoint"]
-        endpoint = endpoint if endpoint else self._endpoint
-        bucket_name = url_info["bucket"]
-        obj_name = url_info["object"]
-        return endpoint, bucket_name, obj_name
-
-    def _ls_root(self, endpoint: str) -> List[Dict]:
+    def _ls_bucket(self) -> List[Dict]:
         infos = []
-        service = oss2.Service(self._auth, endpoint)
+        service = oss2.Service(self._auth, self._endpoint)
         for bucket in oss2.BucketIterator(service):
             infos.append(
                 {
@@ -169,16 +152,35 @@ class OSSFileSystem(AbstractFileSystem):
                     "type": "directory",
                     "size": 0,
                     "StorageClass": "BUCKET",
+                    "CreateTime": bucket.creation_date,
                 }
             )
         return infos
 
-    def _ls_bucket(
-        self, endpoint: str, bucket_name: str, obj_name: str
-    ) -> List[Dict]:
+    def _ls_object(self, bucket_name: str, obj_name: str) -> List[Dict]:
         infos = []
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
-        for obj in oss2.ObjectIterator(bucket, prefix=obj_name, delimiter="/"):
+        obj_name.rstrip("/")
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        simplifiedmeta = bucket.get_object_meta(obj_name)
+        infos.append(
+            {
+                "name": bucket_name + "/" + obj_name,
+                "type": "file",
+                "size": int(simplifiedmeta.headers["Content-Length"]),
+                "StorageClass": "OBJECT",
+                "LastModified": simplifiedmeta.headers["Last-Modified"],
+            }
+        )
+        return infos
+
+    def _ls_directory(self, bucket_name: str, directory: str) -> List[Dict]:
+        infos = []
+        if not directory.endswith("/"):
+            directory += "/"
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        for obj in oss2.ObjectIterator(
+            bucket, prefix=directory, delimiter="/"
+        ):
             data = {
                 "name": bucket_name + "/" + obj.key,
                 "type": "file",
@@ -193,39 +195,54 @@ class OSSFileSystem(AbstractFileSystem):
         return infos
 
     def ls(self, path, detail=True, **kwargs):
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-
+        bucket_name, obj_name = self.split_path(path)
         if not bucket_name:
-            infos = self._ls_root(endpoint)
+            infos = self._ls_bucket()
+        if not obj_name:
+            infos = self._ls_directory(bucket_name, obj_name)
         else:
             try:
-                infos = self._ls_bucket(endpoint, bucket_name, obj_name)
-            except oss2.exceptions.NoSuchBucket:
-                infos = []
+                infos = self._ls_object(bucket_name, obj_name)
+            except oss2.exceptions.NoSuchBucket as err:
+                raise FileNotFoundError(path) from err
+            except oss2.exceptions.NoSuchKey:
+                infos = self._ls_directory(bucket_name, obj_name)
 
-        if not infos and not self.exists(path):
+        if not infos:
             raise FileNotFoundError(path)
 
         if detail:
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
 
+    @staticmethod
+    def bucket_exist(bucket: oss2.Bucket):
+        """Is the bucket exists"""
+        try:
+            bucket.get_bucket_info()
+        except oss2.exceptions.NoSuchBucket:
+            return False
+        return True
+
     def exists(self, path, **kwargs):
         """Is there a file at the given path"""
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         obj_name = obj_name.rstrip("/")
+        if not obj_name:
+            return self.bucket_exist(bucket)
+
         if bucket.object_exists(obj_name):
             return True
 
         obj_name = obj_name + "/"
-        ls_result = self._ls_bucket(endpoint, bucket, obj_name)
+        ls_result = self._ls_object(bucket_name, obj_name)
         return bool(ls_result)
 
     def ukey(self, path):
         """Hash of file properties, to tell if it has changed"""
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         try:
             obj_stream = bucket.get_object(obj_name)
         except oss2.exceptions.NoSuchKey as err:
@@ -252,15 +269,15 @@ class OSSFileSystem(AbstractFileSystem):
         Copy within two locations in the filesystem
         # todo: big file optimization
         """
-        endpoint1, bucket_name1, obj_name1 = self._get_path_info(path1)
-        endpoint2, bucket_name2, obj_name2 = self._get_path_info(path2)
-        if endpoint1 != endpoint2 or bucket_name1 != bucket_name2:
+        bucket_name1, obj_name1 = self.split_path(path1)
+        bucket_name2, obj_name2 = self.split_path(path2)
+        if bucket_name1 != bucket_name2:
             tempdir = "." + self.ukey(path1)
             self.get_file(path1, tempdir)
             self.put_file(tempdir, path2)
             os.remove(tempdir)
         else:
-            bucket = oss2.Bucket(self._auth, endpoint1, bucket_name1)
+            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name1)
             bucket.copy_object(bucket_name1, obj_name1, obj_name2)
 
     def _rm(self, path: Union[str, List[str]]):
@@ -276,8 +293,8 @@ class OSSFileSystem(AbstractFileSystem):
                 self._rm(file)
         if not self.exists(path):
             return
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         bucket.delete_object(obj_name)
 
     def get_file(self, rpath, lpath, **kwargs):
@@ -288,8 +305,8 @@ class OSSFileSystem(AbstractFileSystem):
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
-            endpoint, bucket_name, obj_name = self._get_path_info(lpath)
-            bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+            bucket_name, obj_name = self.split_path(lpath)
+            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
             bucket.get_object_to_file(obj_name, rpath)
 
     def put_file(self, lpath, rpath, **kwargs):
@@ -300,48 +317,35 @@ class OSSFileSystem(AbstractFileSystem):
         if os.path.isdir(lpath):
             self.makedirs(rpath, exist_ok=True)
         else:
-            endpoint, bucket_name, obj_name = self._get_path_info(lpath)
-            bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+            bucket_name, obj_name = self.split_path(lpath)
+            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
             bucket.put_object_from_file(obj_name, rpath)
-
-    def makedirs(self, path, exist_ok=False):
-        """Recursively make directories
-
-        Creates directory at path and any intervening required directories.
-        Raises exception if, for instance, the path already exists but is a
-        file.
-
-        Parameters
-        ----------
-        path: str
-            leaf directory name
-        exist_ok: bool (False)
-            If True, will error if the target already exists
-        """
-        if self.exists(path):
-            if exist_ok:
-                return
-            raise FileExistsError(path)
-        path = path.rstrip("/") + "/"
-        self.touch(path)
 
     def created(self, path):
         """Return the created timestamp of a file as a datetime.datetime"""
-        raise NotImplementedError("OSS has no created timestamp")
+        bucket_name, obj_name = self.split_path(path)
+        if obj_name:
+            raise NotImplementedError("OSS has no created timestamp")
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        timestamp = bucket.get_bucket_info().creation_date
+        return datetime.fromtimestamp(timestamp)
 
     def modified(self, path):
         """Return the modified timestamp of a file as a datetime.datetime"""
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        if not obj_name:
+            raise NotImplementedError("bucket has no modified timestamp")
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         simplifiedmeta = bucket.get_object_meta(obj_name)
-        return simplifiedmeta.headers["Content-Length"]
+        timestamp = simplifiedmeta.headers["Last-Modified"]
+        return datetime.fromtimestamp(timestamp)
 
     def append_object(self, path: str, location: int, value: bytes) -> int:
         """
         Append bytes to the object
         """
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         result = bucket.append_object(obj_name, location, value)
         return result.next_position
 
@@ -350,8 +354,8 @@ class OSSFileSystem(AbstractFileSystem):
         Return object bytes in range
         """
         headers = {"x-oss-range-behavior": "standard"}
-        endpoint, bucket_name, obj_name = self._get_path_info(path)
-        bucket = oss2.Bucket(self._auth, endpoint, bucket_name)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         try:
             object_stream = bucket.get_object(
                 obj_name, byte_range=(start, end), headers=headers
@@ -359,6 +363,11 @@ class OSSFileSystem(AbstractFileSystem):
         except oss2.exceptions.ServerError as err:
             raise err
         return object_stream.read()
+
+    def sign(self, path, expiration=100, **kwargs):
+        raise NotImplementedError(
+            "Sign is not implemented for this filesystem"
+        )
 
 
 class OSSFile(AbstractBufferedFile):

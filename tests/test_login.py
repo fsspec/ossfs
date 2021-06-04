@@ -31,9 +31,11 @@ def fetch_sts_token(access_key_id, access_key_secret, role_arn):
 
     j = json.loads(oss2.to_unicode(body))
 
+    access_key_id = j["Credentials"]["AccessKeyId"]
+    access_key_secret = j["Credentials"]["AccessKeySecret"]
     security_token = j["Credentials"]["SecurityToken"]
 
-    return security_token
+    return access_key_id, access_key_secret, security_token
 
 
 def test_access_key_login(ossfs):
@@ -43,12 +45,11 @@ def test_access_key_login(ossfs):
 
 def test_sts_login(endpoint):
     """Test sts login"""
-    token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
+    key, secret, token = fetch_sts_token(
+        STSAccessKeyId, STSAccessKeySecret, STSArn
+    )
     ossfs = OSSFileSystem(
-        key=STSAccessKeySecret,
-        secret=STSAccessKeySecret,
-        token=token,
-        endpoint=endpoint,
+        key=key, secret=secret, token=token, endpoint=endpoint,
     )
     ossfs.ls("dvc-temp")
 
@@ -56,4 +57,4 @@ def test_sts_login(endpoint):
 def test_anonymous_login(endpoint):
     """test anonymous login"""
     ossfs = OSSFileSystem(endpoint=endpoint)
-    ossfs.ls("/dvc-test-anonymous")
+    ossfs.ls("/dvc-test-anonymous/LICENSE")
