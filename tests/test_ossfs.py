@@ -1,6 +1,10 @@
 """
 Test class level functionality.
 """
+import pickle
+import time
+from multiprocessing.pool import ThreadPool
+
 import fsspec.core
 import pytest
 
@@ -54,3 +58,45 @@ def test_multiple_objects(init_config, ossfs):
     ossfs2 = OSSFileSystem(**init_config)
     assert ossfs1.ls(TEST_BUCKET + "/test") == ossfs2.ls(TEST_BUCKET + "/test")
     assert ossfs.ls(TEST_BUCKET + "/test") == ossfs2.ls(TEST_BUCKET + "/test")
+
+
+def test_current(ossfs, init_config):
+    """
+    Test current method in ossfs
+    """
+    ossfs._cache.clear()  # pylint: disable=protected-access
+    ossfs = OSSFileSystem(**init_config)
+    assert ossfs.current() is ossfs
+    assert OSSFileSystem.current() is ossfs
+
+
+def test_connect_many(init_config):
+    """
+    Test connect many ossfs simultaneously
+    """
+
+    def task(num):  # pylint: disable=unused-argument
+        ossfs = OSSFileSystem(**init_config)
+        ossfs.ls(TEST_BUCKET)
+        time.sleep(5)
+        ossfs.ls(TEST_BUCKET)
+        return True
+
+    pool = ThreadPool(processes=20)
+    out = pool.map(task, range(40))
+    assert all(out)
+    pool.close()
+    pool.join()
+
+
+def test_pickle(ossfs):
+    """
+    Test pickle dumps/loads ossfs
+    """
+
+    path = TEST_BUCKET + "/tmp/test"
+
+    ossfs1 = pickle.loads(pickle.dumps(ossfs))
+    assert ossfs.ls(path) == ossfs1.ls(path)
+    ossfs2 = pickle.loads(pickle.dumps(ossfs1))
+    assert ossfs.ls(path) == ossfs2.ls(path)
