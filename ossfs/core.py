@@ -15,6 +15,24 @@ from fsspec.utils import stringify_path
 logger = logging.getLogger("")
 
 
+def error_decorator(func):
+    """
+    Warp oss exceptions to file system exceptions
+    """
+
+    def new_func(self, path, *args, **kwargs):
+        try:
+            result = func(self, path, *args, **kwargs)
+        except (
+            oss2.exceptions.NoSuchBucket,
+            oss2.exceptions.NoSuchKey,
+        ) as err:
+            raise FileNotFoundError(path) from err
+        return result
+
+    return new_func
+
+
 class OSSFileSystem(AbstractFileSystem):
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
@@ -29,7 +47,7 @@ class OSSFileSystem(AbstractFileSystem):
         key: Optional[str] = None,
         secret: Optional[str] = None,
         token: Optional[str] = None,
-        default_cache_type: Optional[str] = "bytes",
+        default_cache_type: Optional[str] = "readahead",
         **kwargs,  # pylint: disable=too-many-arguments
     ):
         """
@@ -151,6 +169,7 @@ class OSSFileSystem(AbstractFileSystem):
                     "name": bucket.name,
                     "type": "directory",
                     "size": 0,
+                    "Size": 0,
                     "StorageClass": "BUCKET",
                     "CreateTime": bucket.creation_date,
                 }
@@ -167,6 +186,7 @@ class OSSFileSystem(AbstractFileSystem):
                 "name": bucket_name + "/" + obj_name,
                 "type": "file",
                 "size": int(simplifiedmeta.headers["Content-Length"]),
+                "Size": int(simplifiedmeta.headers["Content-Length"]),
                 "StorageClass": "OBJECT",
                 "LastModified": simplifiedmeta.headers["Last-Modified"],
             }
@@ -185,31 +205,28 @@ class OSSFileSystem(AbstractFileSystem):
                 "name": bucket_name + "/" + obj.key,
                 "type": "file",
                 "size": obj.size,
+                "Size": obj.size,
                 "StorageClass": "OBJECT",
                 "LastModified": obj.last_modified,
             }
             if obj.is_prefix():
                 data["type"] = "directory"
                 data["size"] = 0
+                data["Size"] = 0
             infos.append(data)
         return infos
 
     def ls(self, path, detail=True, **kwargs):
         bucket_name, obj_name = self.split_path(path)
-        if not bucket_name:
-            infos = self._ls_bucket()
-        if not obj_name:
-            infos = self._ls_directory(bucket_name, obj_name)
-        else:
+        if bucket_name:
             try:
                 infos = self._ls_object(bucket_name, obj_name)
-            except oss2.exceptions.NoSuchBucket as err:
-                raise FileNotFoundError(path) from err
-            except oss2.exceptions.NoSuchKey:
+            except oss2.exceptions.OssError:
                 infos = self._ls_directory(bucket_name, obj_name)
-
-        if not infos:
-            raise FileNotFoundError(path)
+        else:
+            if not obj_name:
+                raise ValueError(path)
+            infos = self._ls_bucket()
 
         if detail:
             return sorted(infos, key=lambda i: i["name"])
@@ -239,14 +256,12 @@ class OSSFileSystem(AbstractFileSystem):
         ls_result = self._ls_object(bucket_name, obj_name)
         return bool(ls_result)
 
+    @error_decorator
     def ukey(self, path):
         """Hash of file properties, to tell if it has changed"""
         bucket_name, obj_name = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
-        try:
-            obj_stream = bucket.get_object(obj_name)
-        except oss2.exceptions.NoSuchKey as err:
-            raise FileNotFoundError(path) from err
+        obj_stream = bucket.get_object(obj_name)
         return obj_stream.server_crc
 
     def checksum(self, path):
@@ -292,7 +307,7 @@ class OSSFileSystem(AbstractFileSystem):
             for file in path:
                 self._rm(file)
         if not self.exists(path):
-            return
+            raise FileNotFoundError(path)
         bucket_name, obj_name = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         bucket.delete_object(obj_name)
@@ -321,6 +336,7 @@ class OSSFileSystem(AbstractFileSystem):
             bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
             bucket.put_object_from_file(obj_name, rpath)
 
+    @error_decorator
     def created(self, path):
         """Return the created timestamp of a file as a datetime.datetime"""
         bucket_name, obj_name = self.split_path(path)
@@ -340,6 +356,7 @@ class OSSFileSystem(AbstractFileSystem):
         timestamp = simplifiedmeta.headers["Last-Modified"]
         return datetime.fromtimestamp(timestamp)
 
+    @error_decorator
     def append_object(self, path: str, location: int, value: bytes) -> int:
         """
         Append bytes to the object
@@ -349,6 +366,7 @@ class OSSFileSystem(AbstractFileSystem):
         result = bucket.append_object(obj_name, location, value)
         return result.next_position
 
+    @error_decorator
     def get_object(self, path: str, start: int, end: int) -> bytes:
         """
         Return object bytes in range
@@ -381,19 +399,22 @@ class OSSFile(AbstractBufferedFile):
             This is the last block, so should complete file, if
             self.autocommit is True.
         """
-        self.location = self.fs.append_object(
-            self.path, self.location, self.buffer.getvalue()
+        self.loc = self.fs.append_object(
+            self.path, self.loc, self.buffer.getvalue()
         )
         return True
 
     def _initiate_upload(self):
         """ Create remote file/upload """
         if "a" in self.mode:
-            self.location = self.size
+            self.loc = 0
+            if self.fs.exists(self.path):
+                self.loc = self.fs.info(self.path)["size"]
         elif "w" in self.mode:
             # create empty file to append to
-            self.location = 0
-            self.fs.rm_file(self.path)
+            self.loc = 0
+            if self.fs.exists(self.path):
+                self.fs.rm_file(self.path)
 
     def _fetch_range(self, start, end):
         """
