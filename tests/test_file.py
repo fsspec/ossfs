@@ -25,6 +25,19 @@ test_file_b = test_bucket_name + "/tmp/test/b"
 test_file_c = test_bucket_name + "/tmp/test/c"
 
 
+def test_simple(ossfs):
+    " basic test"
+    data = b"a" * (10 * 2 ** 20)
+
+    with ossfs.open(test_file_a, "wb") as f:
+        f.write(data)
+
+    with ossfs.open(test_file_a, "rb") as f:
+        out = f.read(len(data))
+        assert len(data) == len(out)
+        assert out == data
+
+
 def test_seek(ossfs):
     with ossfs.open(test_file_a, "wb") as f:
         f.write(b"123")
@@ -50,11 +63,6 @@ def test_seek(ossfs):
         assert f.read(1) == b"2"
         for i in range(4):
             assert f.seek(i) == i
-
-
-def test_bad_open(ossfs):
-    with pytest.raises(ValueError):
-        ossfs.open("")
 
 
 def test_read_small(ossfs):
