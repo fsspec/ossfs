@@ -20,8 +20,6 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-    - name: Check README
-      run: python setup.py checkdocs
     - uses: pre-commit/action@v2.0.2
 
   tests:
