@@ -19,7 +19,7 @@ jobs:
         python-version: 3.8
     - name: Install dependencies
       run: |
-        pip install -r requirements.txt
+        pip install ".[tests]"
     - uses: pre-commit/action@v2.0.2
 
   tests:

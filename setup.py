@@ -17,7 +17,7 @@ setup(
     download_url="https://github.com/iterative/ossfs",
     license="Apache-2.0 License",
     install_requires=["fsspec==2021.04.0"],
-    tests_require=tests_requirements,
+    extras_require={"tests": tests_requirements},
     keywords="oss, fsspec",
     python_requires=">=3.6",
     classifiers=[
