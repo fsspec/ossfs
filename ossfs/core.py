@@ -12,9 +12,6 @@ import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
-for _ in logging.root.manager.loggerDict:
-    logging.getLogger(_).setLevel(logging.CRITICAL)
-
 logger = logging.getLogger("ossfs")
 
 
