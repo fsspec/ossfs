@@ -3,4 +3,4 @@ pylint==2.8.2
 pylint-pytest==1.0.3
 mypy==0.812
 requests==2.25.1
-aliyun-python-sdk-core==2.13.32
+aliyun-python-sdk-sts==3.0.2

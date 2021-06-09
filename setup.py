@@ -16,7 +16,7 @@ setup(
     author_email="gao@iterive.ai",
     download_url="https://github.com/iterative/ossfs",
     license="Apache-2.0 License",
-    install_requires=["fsspec==2021.04.0"],
+    install_requires=["fsspec==2021.04.0", "oss2==2.6.1"],
     extras_require={"tests": tests_requirements},
     keywords="oss, fsspec",
     python_requires=">=3.6",
