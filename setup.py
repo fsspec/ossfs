@@ -9,7 +9,7 @@ with open("requirements.txt") as f_r:
 
 setup(
     name="ossfs",
-    version="0.1",
+    version="20210609",
     description="fsspec filesystem for OSS",
     long_description=open("README.md", "r", encoding="UTF-8").read(),
     author="Yanxiang Gao",
@@ -21,7 +21,7 @@ setup(
     keywords="oss, fsspec",
     python_requires=">=3.6",
     classifiers=[
-        "Development Status :: 3 - Alpha",
+        "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3.6",

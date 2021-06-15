@@ -176,16 +176,24 @@ class OSSFileSystem(AbstractFileSystem):
         path : string
             Input path, like
             `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
+            `oss://mybucket/myobject`
         Examples
         --------
         >>> _strip_protocol(
             "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
             )
-        ('mybucket/myobject')
+        ('/mybucket/myobject')
+        >>> _strip_protocol(
+            "oss://mybucket/myobject"
+            )
+        ('/mybucket/myobject')
         """
         if isinstance(path, list):
             return [cls._strip_protocol(p) for p in path]
         path = stringify_path(path)
+        if path.startswith("oss://"):
+            path = path[5:]
+
         parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
         matcher = re.compile(parser_re).match(path)
         if matcher:
