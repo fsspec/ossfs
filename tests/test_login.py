@@ -54,7 +54,7 @@ def test_sts_login(endpoint):
     ossfs.ls("dvc-temp")
 
 
-def test_anonymous_login(endpoint):
+def test_anonymous_login():
     """test anonymous login"""
-    ossfs = OSSFileSystem(endpoint=endpoint)
+    ossfs = OSSFileSystem(endpoint="http://oss-cn-hangzhou.aliyuncs.com")
     ossfs.ls("/dvc-test-anonymous/LICENSE")

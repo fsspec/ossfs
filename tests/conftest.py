@@ -1,10 +1,12 @@
 """
 Pytest setup
 """
+# pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
 import os
 import subprocess
 import time
+import uuid
 
 import pytest
 import requests
@@ -16,20 +18,27 @@ AccessKeyId = os.environ.get("OSS_ACCESS_KEY_ID", "")
 AccessKeySecret = os.environ.get("OSS_SECRET_ACCESS_KEY", "")
 
 
+test_id = uuid.uuid4()
+
+
 @pytest.fixture()
 def emulator_endpoint():
-    """
-    Local server emulator endpoint
-    """
     return "http://127.0.0.1:%s/" % PORT
 
 
 @pytest.fixture()
 def endpoint():
-    """
-    Real test server endpoint
-    """
-    return "http://oss-cn-hangzhou.aliyuncs.com"
+    return os.environ.get("OSS_ENDPOINT")
+
+
+@pytest.fixture()
+def test_bucket_name():
+    return os.environ.get("OSS_TEST_BUCKET_NAME")
+
+
+@pytest.fixture()
+def test_path(test_bucket_name):
+    return f"/{test_bucket_name}/{test_id}"
 
 
 @pytest.fixture()
@@ -54,9 +63,6 @@ def oss_emulator_server_start(emulator_endpoint):
 
 @pytest.fixture()
 def init_config(endpoint):
-    """
-    Server configure
-    """
     result = {}
     result["key"] = AccessKeyId
     result["secret"] = AccessKeySecret
@@ -66,7 +72,4 @@ def init_config(endpoint):
 
 @pytest.fixture()
 def ossfs(init_config):
-    """
-    OSSFS object fixture
-    """
     return OSSFileSystem(**init_config)
