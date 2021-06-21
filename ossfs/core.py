@@ -210,12 +210,15 @@ class OSSFileSystem(AbstractFileSystem):
         bucket_name, directory = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         infos = []
+        bucket_path = (
+            f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
+        )
         for obj in oss2.ObjectIterator(
             bucket, prefix=directory, delimiter="/"
         ):
             data = {
-                "name": path.rstrip(directory) + "/" + obj.key,
-                "Key": path.rstrip(directory) + "/" + obj.key,
+                "name": bucket_path + "/" + obj.key,
+                "Key": bucket_path + "/" + obj.key,
                 "type": "file",
                 "size": obj.size,
                 "Size": obj.size,
