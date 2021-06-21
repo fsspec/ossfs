@@ -217,8 +217,8 @@ class OSSFileSystem(AbstractFileSystem):
             bucket, prefix=directory, delimiter="/"
         ):
             data = {
-                "name": bucket_path + "/" + obj.key,
-                "Key": bucket_path + "/" + obj.key,
+                "name": bucket_path + obj.key,
+                "Key": bucket_path + obj.key,
                 "type": "file",
                 "size": obj.size,
                 "Size": obj.size,
