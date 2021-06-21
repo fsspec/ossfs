@@ -225,7 +225,7 @@ class OSSFileSystem(AbstractFileSystem):
                 "StorageClass": "OBJECT",
             }
             if obj.last_modified:
-                data["LastModified"] = obj.last_modified - 28800
+                data["LastModified"] = obj.last_modified
             if obj.is_prefix():
                 data["type"] = "directory"
                 data["size"] = 0
