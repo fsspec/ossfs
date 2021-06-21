@@ -38,12 +38,12 @@ def fetch_sts_token(access_key_id, access_key_secret, role_arn):
     return access_key_id, access_key_secret, security_token
 
 
-def test_access_key_login(ossfs):
+def test_access_key_login(ossfs, test_bucket_name):
     """Test access key login"""
-    ossfs.ls("dvc-temp")
+    ossfs.ls(test_bucket_name)
 
 
-def test_sts_login(endpoint):
+def test_sts_login(endpoint, test_bucket_name):
     """Test sts login"""
     key, secret, token = fetch_sts_token(
         STSAccessKeyId, STSAccessKeySecret, STSArn
@@ -51,10 +51,10 @@ def test_sts_login(endpoint):
     ossfs = OSSFileSystem(
         key=key, secret=secret, token=token, endpoint=endpoint,
     )
-    ossfs.ls("dvc-temp")
+    ossfs.ls(test_bucket_name)
 
 
-def test_anonymous_login(endpoint):
+def test_anonymous_login():
     """test anonymous login"""
-    ossfs = OSSFileSystem(endpoint=endpoint)
+    ossfs = OSSFileSystem(endpoint="http://oss-cn-hangzhou.aliyuncs.com")
     ossfs.ls("/dvc-test-anonymous/LICENSE")

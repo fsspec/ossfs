@@ -159,11 +159,11 @@ class OSSFileSystem(AbstractFileSystem):
         parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
         matcher = re.compile(parser_re).match(path)
         if matcher:
-            path = path["path"]
+            path = matcher["path"]
         return path or cls.root_marker
 
-    @staticmethod
-    def _ls_bucket(service: oss2.Service) -> List[Dict]:
+    def _ls_bucket(self) -> List[Dict]:
+        service = oss2.Service(self._auth, endpoint=self._endpoint)
         infos = []
         for bucket in oss2.BucketIterator(service):
             infos.append(
@@ -179,14 +179,16 @@ class OSSFileSystem(AbstractFileSystem):
             )
         return infos
 
-    def _ls_object(self, bucket: oss2.Bucket, obj_name: str) -> List[Dict]:
+    def _ls_object(self, path: str) -> List[Dict]:
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         infos = []
         if not self._object_exists(bucket, obj_name):
             return infos
         simplifiedmeta = bucket.get_object_meta(obj_name)
         info = {
-            "name": bucket.bucket_name + "/" + obj_name,
-            "Key": bucket.bucket_name + "/" + obj_name,
+            "name": path,
+            "Key": path,
             "type": "file",
             "size": int(simplifiedmeta.headers["Content-Length"]),
             "Size": int(simplifiedmeta.headers["Content-Length"]),
@@ -203,22 +205,27 @@ class OSSFileSystem(AbstractFileSystem):
 
         return infos
 
-    @staticmethod
-    def _ls_directory(bucket: oss2.Bucket, directory: str) -> List[Dict]:
+    def _ls_directory(self, path: str) -> List[Dict]:
+        path = path.rstrip("/") + "/"
+        bucket_name, directory = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         infos = []
+        bucket_path = (
+            f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
+        )
         for obj in oss2.ObjectIterator(
             bucket, prefix=directory, delimiter="/"
         ):
             data = {
-                "name": bucket.bucket_name + "/" + obj.key,
-                "Key": bucket.bucket_name + "/" + obj.key,
+                "name": bucket_path + obj.key,
+                "Key": bucket_path + obj.key,
                 "type": "file",
                 "size": obj.size,
                 "Size": obj.size,
                 "StorageClass": "OBJECT",
             }
             if obj.last_modified:
-                data["LastModified"] = obj.last_modified - 28800
+                data["LastModified"] = obj.last_modified
             if obj.is_prefix():
                 data["type"] = "directory"
                 data["size"] = 0
@@ -227,17 +234,13 @@ class OSSFileSystem(AbstractFileSystem):
         return infos
 
     def ls(self, path, detail=True, **kwargs):
-        bucket_name, obj_name = self.split_path(path)
+        bucket_name, _ = self.split_path(path)
         if bucket_name:
-            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
-            infos = self._ls_object(bucket, obj_name)
+            infos = self._ls_object(path)
             if not infos:
-                if obj_name:
-                    obj_name = obj_name.rstrip("/") + "/"
-                infos = self._ls_directory(bucket, obj_name)
+                infos = self._ls_directory(path)
         else:
-            service = oss2.Service(self._auth, self._endpoint)
-            infos = self._ls_bucket(service)
+            infos = self._ls_bucket()
 
         if not infos:
             raise FileNotFoundError(path)
@@ -260,9 +263,8 @@ class OSSFileSystem(AbstractFileSystem):
             return False
         return bucket.object_exists(object_name)
 
-    def _directory_exists(self, bucket: oss2.Bucket, dirname: str):
-        dirname = dirname.rstrip("/") + "/"
-        ls_result = self._ls_directory(bucket, dirname)
+    def _directory_exists(self, dirname: str):
+        ls_result = self._ls_directory(dirname)
         return bool(ls_result)
 
     def exists(self, path, **kwargs):
@@ -281,7 +283,7 @@ class OSSFileSystem(AbstractFileSystem):
         if bucket.object_exists(obj_name):
             return True
 
-        return self._directory_exists(bucket, obj_name)
+        return self._directory_exists(path)
 
     @error_decorator
     def ukey(self, path):

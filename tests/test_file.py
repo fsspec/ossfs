@@ -5,11 +5,9 @@ Test all OSSFile related methods
 # pylint:disable=missing-function-docstring
 # pylint:disable=protected-access
 import io
-from array import array
 
 import pytest
 
-test_bucket_name = "dvc-temp"
 files = {
     "LICENSE": (
         b"                                 Apache License\n"
@@ -20,29 +18,27 @@ files = {
 }
 
 glob_files = {"file.dat": b"", "filexdat": b""}
-test_file_a = test_bucket_name + "/tmp/test/a"
-test_file_b = test_bucket_name + "/tmp/test/b"
-test_file_c = test_bucket_name + "/tmp/test/c"
 
 
-def test_simple(ossfs):
-    " basic test"
+def test_simple(ossfs, test_path):
+    file = test_path + "/test_simple/file"
     data = b"a" * (10 * 2 ** 20)
 
-    with ossfs.open(test_file_a, "wb") as f:
+    with ossfs.open(file, "wb") as f:
         f.write(data)
 
-    with ossfs.open(test_file_a, "rb") as f:
+    with ossfs.open(file, "rb") as f:
         out = f.read(len(data))
         assert len(data) == len(out)
         assert out == data
 
 
-def test_seek(ossfs):
-    with ossfs.open(test_file_a, "wb") as f:
+def test_seek(ossfs, test_path):
+    file = test_path + "/test_seek/file"
+    with ossfs.open(file, "wb") as f:
         f.write(b"123")
 
-    with ossfs.open(test_file_a) as f:
+    with ossfs.open(file) as f:
         f.seek(1000)
         with pytest.raises(ValueError):
             f.seek(-1)
@@ -65,7 +61,7 @@ def test_seek(ossfs):
             assert f.seek(i) == i
 
 
-def test_read_small(ossfs):
+def test_read_small(ossfs, test_bucket_name):
     fn = test_bucket_name + "/number"
     with ossfs.open(fn, "rb", block_size=3) as f:
         out = []
@@ -77,7 +73,7 @@ def test_read_small(ossfs):
         assert ossfs.cat(fn) == b"".join(out)
 
 
-def test_read_ossfs_block(ossfs):
+def test_read_ossfs_block(ossfs, test_bucket_name):
     data = files["LICENSE"]
     lines = io.BytesIO(data).readlines()
     path = test_bucket_name + "/LICENSE"
@@ -96,49 +92,24 @@ def test_read_ossfs_block(ossfs):
     assert ossfs.read_block(path, 5, None) == ossfs.read_block(path, 5, 25)
 
 
-def test_write_small(ossfs):
-    with ossfs.open(test_bucket_name + "/test", "wb") as f:
-        f.write(b"hello")
-    assert ossfs.cat(test_bucket_name + "/test") == b"hello"
-    ossfs.open(test_bucket_name + "/test", "wb").close()
-    assert ossfs.info(test_bucket_name + "/test")["Size"] == 0
+@pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
+def test_write(ossfs, test_path, size):
+    file = test_path + "/test_write/file"
+    data = b"0" * size
+    with ossfs.open(file, "wb") as f:
+        f.write(data)
+    assert ossfs.cat(file) == data
+    assert ossfs.info(file)["Size"] == len(data)
+    ossfs.open(file, "wb").close()
+    assert ossfs.info(file)["Size"] == 0
 
 
-def test_write_large(ossfs):
-    "flush() chunks buffer when processing large singular payload"
-    mb = 2 ** 20
-    payload_size = int(2.5 * 5 * mb)
-    payload = b"0" * payload_size
-
-    with ossfs.open(test_bucket_name + "/test", "wb") as fd:
-        fd.write(payload)
-
-    assert ossfs.cat(test_bucket_name + "/test") == payload
-    assert ossfs.info(test_bucket_name + "/test")["Size"] == payload_size
-
-
-def test_write_limit(ossfs):
-    "flush() respects part_max when processing large singular payload"
-    mb = 2 ** 20
-    block_size = 15 * mb
-    payload_size = 44 * mb
-    payload = b"0" * payload_size
-
-    with ossfs.open(
-        test_bucket_name + "/test", "wb", blocksize=block_size
-    ) as fd:
-        fd.write(payload)
-
-    assert ossfs.cat(test_bucket_name + "/test") == payload
-
-    assert ossfs.info(test_bucket_name + "/test")["Size"] == payload_size
-
-
-def test_write_fails(ossfs):
+def test_write_fails(ossfs, test_path):
+    file = test_path + "/test_write_fails/temp"
     with pytest.raises(ValueError):
-        ossfs.touch(test_bucket_name + "/temp")
-        ossfs.open(test_bucket_name + "/temp", "rb").write(b"hello")
-    f = ossfs.open(test_bucket_name + "/temp", "wb")
+        ossfs.touch(file)
+        ossfs.open(file, "rb").write(b"hello")
+    f = ossfs.open(file, "wb")
     f.close()
     with pytest.raises(ValueError):
         f.write(b"hello")
@@ -146,24 +117,23 @@ def test_write_fails(ossfs):
         ossfs.open("nonexistentbucket/temp", "wb").close()
 
 
-def test_write_blocks(ossfs):
-    with ossfs.open(test_bucket_name + "/temp", "wb") as f:
+def test_write_blocks(ossfs, test_path):
+    file = test_path + "/test_write_blocks/temp"
+    with ossfs.open(file, "wb") as f:
         f.write(b"a" * 2 * 2 ** 20)
         assert f.buffer.tell() == 2 * 2 ** 20
         f.flush()
         assert f.buffer.tell() == 2 * 2 ** 20
         f.write(b"a" * 2 * 2 ** 20)
         f.write(b"a" * 2 * 2 ** 20)
-    assert ossfs.info(test_bucket_name + "/temp")["Size"] == 6 * 2 ** 20
-    with ossfs.open(
-        test_bucket_name + "/temp", "wb", block_size=10 * 2 ** 20
-    ) as f:
+    assert ossfs.info(file)["Size"] == 6 * 2 ** 20
+    with ossfs.open(file, "wb", block_size=10 * 2 ** 20) as f:
         f.write(b"a" * 15 * 2 ** 20)
         assert f.buffer.tell() == 0
-    assert ossfs.info(test_bucket_name + "/temp")["Size"] == 15 * 2 ** 20
+    assert ossfs.info(file)["Size"] == 15 * 2 ** 20
 
 
-def test_readline(ossfs):
+def test_readline(ossfs, test_bucket_name):
     all_items = files.items()
     for k, data in all_items:
         with ossfs.open("/".join([test_bucket_name, k]), "rb") as f:
@@ -174,16 +144,18 @@ def test_readline(ossfs):
             assert result == expected
 
 
-def test_readline_empty(ossfs):
+def test_readline_empty(ossfs, test_path):
+    file = test_path + "/test_readline_empty/empty"
     data = b""
-    with ossfs.open(test_file_a, "wb") as f:
+    with ossfs.open(file, "wb") as f:
         f.write(data)
-    with ossfs.open(test_file_a, "rb") as f:
+    with ossfs.open(file, "rb") as f:
         result = f.readline()
         assert result == data
 
 
-def test_readline_blocksize(ossfs):
+def test_readline_blocksize(ossfs, test_path):
+    test_file_a = test_path + "/test_readline_blocksize/a"
     data = b"ab\n" + b"a" * (10 * 2 ** 20) + b"\nab"
     with ossfs.open(test_file_a, "wb") as f:
         f.write(data)
@@ -201,18 +173,19 @@ def test_readline_blocksize(ossfs):
         assert result == expected
 
 
-def test_next(ossfs):
+def test_next(ossfs, test_bucket_name):
     expected = files["LICENSE"].split(b"\n")[0] + b"\n"
     with ossfs.open(test_bucket_name + "/LICENSE") as f:
         result = next(f)
         assert result == expected
 
 
-def test_iterable(ossfs):
+def test_iterable(ossfs, test_path):
+    file = test_path + "/test_iterable/file"
     data = b"abc\n123"
-    with ossfs.open(test_file_a, "wb") as f:
+    with ossfs.open(file, "wb") as f:
         f.write(data)
-    with ossfs.open(test_file_a) as f, io.BytesIO(data) as g:
+    with ossfs.open(file) as f, io.BytesIO(data) as g:
         for fromossfs, fromio in zip(f, g):
             assert fromossfs == fromio
         f.seek(0)
@@ -221,70 +194,42 @@ def test_iterable(ossfs):
         f.seek(1)
         assert f.readline() == b"bc\n"
 
-    with ossfs.open(test_file_a) as f:
+    with ossfs.open(file) as f:
         out = list(f)
-    with ossfs.open(test_file_a) as f:
+    with ossfs.open(file) as f:
         out2 = f.readlines()
     assert out == out2
     assert b"".join(out) == data
 
 
-def test_readable(ossfs):
-    with ossfs.open(test_file_a, "wb") as f:
+def test_file_status(ossfs, test_path):
+    file = test_path + "/test_file_status/file"
+    with ossfs.open(file, "wb") as f:
         assert not f.readable()
-
-    with ossfs.open(test_file_a, "rb") as f:
-        assert f.readable()
-
-
-def test_seekable(ossfs):
-    with ossfs.open(test_file_a, "wb") as f:
         assert not f.seekable()
-
-    with ossfs.open(test_file_a, "rb") as f:
-        assert f.seekable()
-
-
-def test_writable(ossfs):
-    with ossfs.open(test_file_a, "wb") as f:
         assert f.writable()
 
-    with ossfs.open(test_file_a, "rb") as f:
+    with ossfs.open(file, "rb") as f:
+        assert f.readable()
+        assert f.seekable()
         assert not f.writable()
 
 
-def test_append(ossfs):
-    data = b"start"
-    ossfs.rm(test_file_b)
-    with ossfs.open(test_file_b, "ab") as f:
+@pytest.mark.parametrize("data_size", [0, 20, 10 * 2 ** 20])
+@pytest.mark.parametrize("append_size", [0, 20, 10 * 2 ** 20])
+def test_append(ossfs, test_path, data_size, append_size):
+    file = test_path + "/test_append/file"
+    data = b"1" * data_size
+    extra = b"2" * append_size
+    with ossfs.open(file, "wb") as f:
         f.write(data)
-        assert f.tell() == len(data)  # append, no write, small file
-    with ossfs.open(test_file_b, "ab") as f:
-        f.write(b"extra")  # append, write, small file
-    assert ossfs.cat(test_file_b) == data + b"extra"
-
-    with ossfs.open(test_file_a, "wb") as f:
-        f.write(b"a" * 10 * 2 ** 20)
-    with ossfs.open(test_file_a, "ab") as f:
-        pass  # append, no write, big file
-    assert ossfs.cat(test_file_a) == b"a" * 10 * 2 ** 20
-
-    with ossfs.open(test_file_a, "ab") as f:
-        f._initiate_upload()
-        f.write(b"extra")  # append, small write, big file
-        assert f.tell() == 10 * 2 ** 20 + 5
-    assert ossfs.cat(test_file_a) == b"a" * 10 * 2 ** 20 + b"extra"
-
-    with ossfs.open(test_file_a, "ab") as f:
-        f.write(b"b" * 10 * 2 ** 20)  # append, big write, big file
-        assert f.tell() == 20 * 2 ** 20 + 5
-    assert (
-        ossfs.cat(test_file_a)
-        == b"a" * 10 * 2 ** 20 + b"extra" + b"b" * 10 * 2 ** 20
-    )
+    assert ossfs.cat(file) == data
+    with ossfs.open(file, "ab") as f:
+        f.write(extra)  # append, write, small file
+    assert ossfs.cat(file) == data + extra
 
 
-def test_bigger_than_block_read(ossfs):
+def test_bigger_than_block_read(ossfs, test_bucket_name):
     with ossfs.open(test_bucket_name + "/number", "rb", block_size=3) as f:
         out = []
         while True:
@@ -296,71 +241,57 @@ def test_bigger_than_block_read(ossfs):
     assert b"".join(out) == b"1234567890\n"
 
 
-def test_array(ossfs):
-
-    data = array("B", [65] * 1000)
-
-    with ossfs.open(test_file_a, "wb") as f:
-        f.write(data)
-
-    with ossfs.open(test_file_a, "rb") as f:
-        out = f.read()
-        assert out == b"A" * 1000
-
-
-def test_text_io__stream_wrapper_works(ossfs):
+def test_text_io__stream_wrapper_works(ossfs, test_path):
     """Ensure using TextIOWrapper works."""
-    with ossfs.open(test_file_c, "wb") as fd:
+    file = test_path + "/test_text_io__stream_wrapper_works/file"
+    with ossfs.open(file, "wb") as fd:
         fd.write("\u00af\\_(\u30c4)_/\u00af".encode("utf-16-le"))
 
-    with ossfs.open(test_file_c, "rb") as fd:
+    with ossfs.open(file, "rb") as fd:
         with io.TextIOWrapper(fd, "utf-16-le") as stream:
             assert stream.readline() == "\u00af\\_(\u30c4)_/\u00af"
 
 
-def test_text_io__basic(ossfs):
+def test_text_io__basic(ossfs, test_path):
     """Text mode is now allowed."""
-
-    with ossfs.open(test_file_c, "w", encoding="utf-8") as fd:
+    file = test_path + "/test_text_io__basic/file"
+    with ossfs.open(file, "w", encoding="utf-8") as fd:
         fd.write("\u00af\\_(\u30c4)_/\u00af")
 
-    with ossfs.open(test_file_c, "r", encoding="utf-8") as fd:
+    with ossfs.open(file, "r", encoding="utf-8") as fd:
         assert fd.read() == "\u00af\\_(\u30c4)_/\u00af"
 
 
-def test_text_io__override_encoding(ossfs):
+def test_text_io__override_encoding(ossfs, test_path):
     """Allow overriding the default text encoding."""
-    ossfs.mkdir("bucket")
+    file = test_path + "/test_text_io__override_encoding/file"
 
-    with ossfs.open(test_file_c, "w", encoding="ibm500") as fd:
+    with ossfs.open(file, "w", encoding="ibm500") as fd:
         fd.write("Hello, World!")
 
-    with ossfs.open(test_file_c, "r", encoding="ibm500") as fd:
+    with ossfs.open(file, "r", encoding="ibm500") as fd:
         assert fd.read() == "Hello, World!"
 
 
-def test_readinto(ossfs):
+def test_readinto(ossfs, test_path):
+    file = test_path + "/test_readinto/file"
 
-    with ossfs.open(test_file_c, "wb") as fd:
+    with ossfs.open(file, "wb") as fd:
         fd.write(b"Hello, World!")
 
     contents = bytearray(15)
 
-    with ossfs.open(test_file_c, "rb") as fd:
+    with ossfs.open(file, "rb") as fd:
         assert fd.readinto(contents) == 13
 
     assert contents.startswith(b"Hello, World!")
 
 
-def test_autocommit():
-    pass
-
-
-def test_seek_reads(ossfs):
-    fn = test_bucket_name + "/myfile"
-    with ossfs.open(fn, "wb") as f:
+def test_seek_reads(ossfs, test_path):
+    file = test_path + "/test_seek_reads/file"
+    with ossfs.open(file, "wb") as f:
         f.write(b"a" * 175627146)
-    with ossfs.open(fn, "rb", blocksize=100) as f:
+    with ossfs.open(file, "rb", blocksize=100) as f:
         f.seek(175561610)
         f.read(65536)
 
