@@ -5,6 +5,7 @@ import logging
 import os
 import re
 from datetime import datetime
+from functools import wraps
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -17,11 +18,37 @@ logging.getLogger("oss2").setLevel(logging.WARNING)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
+def dynamic_block_size(func):
+    """
+    dynamic ajust block size on connection errors
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        retry_count = 0
+
+        while True:
+            try:
+                block_size = kwargs.pop("block_size", None)
+                if not block_size:
+                    block_size = OSSFile.DEFAULT_BLOCK_SIZE
+                if retry_count and block_size >= 2:
+                    block_size = block_size // 2
+                return func(*args, block_size=block_size, **kwargs)
+            except oss2.exceptions.RequestError as error:
+                retry_count += 1
+                if retry_count > 5:
+                    raise error
+
+    return wrapper
+
+
 def error_decorator(func):
     """
     Warp oss exceptions to file system exceptions
     """
 
+    @wraps(func)
     def new_func(self, path, *args, **kwargs):
         try:
             result = func(self, path, *args, **kwargs)
@@ -103,6 +130,7 @@ class OSSFileSystem(AbstractFileSystem):
         return bucket_name, obj_name
 
     @error_decorator
+    @dynamic_block_size
     def _open(
         self,
         path,
@@ -164,8 +192,12 @@ class OSSFileSystem(AbstractFileSystem):
             path = matcher["path"]
         return path or cls.root_marker
 
-    def _ls_bucket(self) -> List[Dict]:
-        service = oss2.Service(self._auth, endpoint=self._endpoint)
+    def _ls_bucket(self, connect_timeout) -> List[Dict]:
+        service = oss2.Service(
+            self._auth,
+            endpoint=self._endpoint,
+            connect_timeout=connect_timeout,
+        )
         infos = []
         for bucket in oss2.BucketIterator(service):
             infos.append(
@@ -181,9 +213,14 @@ class OSSFileSystem(AbstractFileSystem):
             )
         return infos
 
-    def _ls_object(self, path: str) -> List[Dict]:
+    def _ls_object(self, path: str, connect_timeout) -> List[Dict]:
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = oss2.Bucket(
+            self._auth,
+            self._endpoint,
+            bucket_name,
+            connect_timeout=connect_timeout,
+        )
         infos = []
         if not self._object_exists(bucket, obj_name):
             return infos
@@ -207,10 +244,15 @@ class OSSFileSystem(AbstractFileSystem):
 
         return infos
 
-    def _ls_directory(self, path: str) -> List[Dict]:
+    def _ls_directory(self, path: str, connect_timeout) -> List[Dict]:
         path = path.rstrip("/") + "/"
         bucket_name, directory = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = oss2.Bucket(
+            self._auth,
+            self._endpoint,
+            bucket_name,
+            connect_timeout=connect_timeout,
+        )
         infos = []
         bucket_path = (
             f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
@@ -236,13 +278,14 @@ class OSSFileSystem(AbstractFileSystem):
         return infos
 
     def ls(self, path, detail=True, **kwargs):
+        connect_timeout = kwargs.pop("connect_timeout", 60)
         bucket_name, _ = self.split_path(path)
         if bucket_name:
-            infos = self._ls_object(path)
+            infos = self._ls_object(path, connect_timeout)
             if not infos:
-                infos = self._ls_directory(path)
+                infos = self._ls_directory(path, connect_timeout)
         else:
-            infos = self._ls_bucket()
+            infos = self._ls_bucket(connect_timeout)
 
         if not infos:
             raise FileNotFoundError(path)
@@ -265,8 +308,9 @@ class OSSFileSystem(AbstractFileSystem):
             return False
         return bucket.object_exists(object_name)
 
-    def _directory_exists(self, dirname: str):
-        ls_result = self._ls_directory(dirname)
+    def _directory_exists(self, dirname: str, **kwargs):
+        connect_timeout = kwargs.pop("connect_timeout", None)
+        ls_result = self._ls_directory(dirname, connect_timeout)
         return bool(ls_result)
 
     def exists(self, path, **kwargs):
@@ -275,7 +319,13 @@ class OSSFileSystem(AbstractFileSystem):
         if not bucket_name:
             return False
 
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        connect_timeout = kwargs.get("connect_timeout", None)
+        bucket = oss2.Bucket(
+            self._auth,
+            self._endpoint,
+            bucket_name,
+            connect_timeout=connect_timeout,
+        )
         if not self._bucket_exist(bucket):
             return False
 
@@ -285,7 +335,7 @@ class OSSFileSystem(AbstractFileSystem):
         if bucket.object_exists(obj_name):
             return True
 
-        return self._directory_exists(path)
+        return self._directory_exists(path, **kwargs)
 
     @error_decorator
     def ukey(self, path):
@@ -319,11 +369,17 @@ class OSSFileSystem(AbstractFileSystem):
         bucket_name2, obj_name2 = self.split_path(path2)
         if bucket_name1 != bucket_name2:
             tempdir = "." + self.ukey(path1)
-            self.get_file(path1, tempdir)
-            self.put_file(tempdir, path2)
+            self.get_file(path1, tempdir, **kwargs)
+            self.put_file(tempdir, path2, **kwargs)
             os.remove(tempdir)
         else:
-            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name1)
+            connect_timeout = kwargs.pop("connect_timeout", None)
+            bucket = oss2.Bucket(
+                self._auth,
+                self._endpoint,
+                bucket_name1,
+                connect_timeout=connect_timeout,
+            )
             bucket.copy_object(bucket_name1, obj_name1, obj_name2)
 
     @error_decorator
@@ -351,7 +407,13 @@ class OSSFileSystem(AbstractFileSystem):
             os.makedirs(lpath, exist_ok=True)
         else:
             bucket_name, obj_name = self.split_path(rpath)
-            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+            connect_timeout = kwargs.pop("connect_timeout", None)
+            bucket = oss2.Bucket(
+                self._auth,
+                self._endpoint,
+                bucket_name,
+                connect_timeout=connect_timeout,
+            )
             oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
 
     def put_file(self, lpath, rpath, **kwargs):
@@ -363,7 +425,13 @@ class OSSFileSystem(AbstractFileSystem):
             self.makedirs(rpath, exist_ok=True)
         else:
             bucket_name, obj_name = self.split_path(rpath)
-            bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+            connect_timeout = kwargs.pop("connect_timeout", None)
+            bucket = oss2.Bucket(
+                self._auth,
+                self._endpoint,
+                bucket_name,
+                connect_timeout=connect_timeout,
+            )
             if self._object_exists(bucket, obj_name):
                 raise FileExistsError(rpath)
             oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
