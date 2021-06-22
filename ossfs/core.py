@@ -13,6 +13,8 @@ from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
 logger = logging.getLogger("ossfs")
+logging.getLogger("oss2").setLevel(logging.WARNING)
+logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def error_decorator(func):
