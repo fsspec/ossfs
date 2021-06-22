@@ -130,7 +130,6 @@ class OSSFileSystem(AbstractFileSystem):
         return bucket_name, obj_name
 
     @error_decorator
-    @dynamic_block_size
     def _open(
         self,
         path,
@@ -514,6 +513,11 @@ class OSSFileSystem(AbstractFileSystem):
         if truncate or not self.exists(path):
             with self.open(path, "wb", **kwargs):
                 pass
+
+    @dynamic_block_size
+    def cat_file(self, path, start=None, end=None, **kwargs):
+        """ Get the content of a file """
+        super().cat_file(path, start, end, **kwargs)
 
 
 class OSSFile(AbstractBufferedFile):
