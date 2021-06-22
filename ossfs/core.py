@@ -5,14 +5,41 @@ import logging
 import os
 import re
 from datetime import datetime
+from functools import wraps
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
+import urllib3
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
 logger = logging.getLogger("ossfs")
+
+
+def dynamic_block_size(func):
+    """
+    dynamic ajust block size on connection errors
+    """
+
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        retry_count = 0
+
+        while True:
+            try:
+                block_size = kwargs.get("block_size", None)
+                if not block_size:
+                    block_size = OSSFile.DEFAULT_BLOCK_SIZE
+                if retry_count and block_size >= 2 ** 10:
+                    block_size = block_size // 2
+                return func(*args, block_size=block_size, **kwargs)
+            except urllib3.exceptions.HTTPError as error:
+                retry_count += 1
+                if retry_count > 5:
+                    raise error
+
+    return wrapper
 
 
 def error_decorator(func):
@@ -20,6 +47,7 @@ def error_decorator(func):
     Warp oss exceptions to file system exceptions
     """
 
+    @wraps(func)
     def new_func(self, path, *args, **kwargs):
         try:
             result = func(self, path, *args, **kwargs)
@@ -101,6 +129,7 @@ class OSSFileSystem(AbstractFileSystem):
         return bucket_name, obj_name
 
     @error_decorator
+    @dynamic_block_size
     def _open(
         self,
         path,
