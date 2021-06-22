@@ -28,7 +28,7 @@ def dynamic_block_size(func):
 
         while True:
             try:
-                block_size = kwargs.get("block_size", None)
+                block_size = kwargs.pop("block_size", None)
                 if not block_size:
                     block_size = OSSFile.DEFAULT_BLOCK_SIZE
                 if retry_count and block_size >= 2 ** 10:
