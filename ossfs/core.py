@@ -16,31 +16,6 @@ from fsspec.utils import stringify_path
 logger = logging.getLogger("ossfs")
 
 
-def dynamic_connect_timeout(func):
-    """
-    dynamic ajust time out on connection errors
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        retry_count = 0
-
-        while True:
-            try:
-                connect_timeout = kwargs.pop("connect_timeout", None)
-                if not connect_timeout:
-                    connect_timeout = 60
-                if retry_count and connect_timeout <= 600:
-                    connect_timeout = connect_timeout * 2
-                return func(*args, connect_timeout=connect_timeout, **kwargs)
-            except oss2.exceptions.RequestError as error:
-                retry_count += 1
-                if retry_count >= 3:
-                    raise error
-
-    return wrapper
-
-
 def dynamic_block_size(func):
     """
     dynamic ajust block size on connection errors
@@ -55,7 +30,7 @@ def dynamic_block_size(func):
                 block_size = kwargs.pop("block_size", None)
                 if not block_size:
                     block_size = OSSFile.DEFAULT_BLOCK_SIZE
-                if retry_count and block_size >= 2 ** 10:
+                if retry_count and block_size >= 2:
                     block_size = block_size // 2
                 return func(*args, block_size=block_size, **kwargs)
             except oss2.exceptions.RequestError as error:
@@ -300,7 +275,6 @@ class OSSFileSystem(AbstractFileSystem):
             infos.append(data)
         return infos
 
-    @dynamic_connect_timeout
     def ls(self, path, detail=True, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", 60)
         bucket_name, _ = self.split_path(path)
@@ -337,7 +311,6 @@ class OSSFileSystem(AbstractFileSystem):
         ls_result = self._ls_directory(dirname, connect_timeout)
         return bool(ls_result)
 
-    @dynamic_connect_timeout
     def exists(self, path, **kwargs):
         """Is there a file at the given path"""
         bucket_name, obj_name = self.split_path(path)
@@ -423,7 +396,6 @@ class OSSFileSystem(AbstractFileSystem):
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         bucket.delete_object(obj_name)
 
-    @dynamic_connect_timeout
     def get_file(self, rpath, lpath, **kwargs):
         """
         Copy single remote file to local
@@ -442,7 +414,6 @@ class OSSFileSystem(AbstractFileSystem):
             )
             oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
 
-    @dynamic_connect_timeout
     def put_file(self, lpath, rpath, **kwargs):
         """
         Copy single file to remote

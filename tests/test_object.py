@@ -179,7 +179,7 @@ def test_ossfs_big_ls(ossfs, test_path):
     path = test_path + "/test_ossfs_big_ls"
     for x in range(1200):
         ossfs.touch(path + "/%i.part" % x)
-    assert len(ossfs.find(path)) == 1200
+    assert len(ossfs.find(path, connect_timeout=600)) == 1200
     ossfs.rm(path, recursive=True)
     assert len(ossfs.find(path)) == 0
 
@@ -250,9 +250,9 @@ def test_get_put_big(ossfs, tmpdir, test_path):
     data = b"1234567890A" * 2 ** 20
     open(test_file, "wb").write(data)
 
-    ossfs.put(test_file, bigfile)
+    ossfs.put(test_file, bigfile, connect_timeout=600)
     test_file = str(tmpdir.join("test2"))
-    ossfs.get(bigfile, test_file)
+    ossfs.get(bigfile, test_file, connect_timeout=600)
     assert open(test_file, "rb").read() == data
 
 
