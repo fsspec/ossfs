@@ -405,7 +405,7 @@ class OSSFileSystem(AbstractFileSystem):
             os.makedirs(lpath, exist_ok=True)
         else:
             bucket_name, obj_name = self.split_path(rpath)
-            connect_timeout = kwargs.get("connect_timeout", None)
+            connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = oss2.Bucket(
                 self._auth,
                 self._endpoint,
@@ -423,7 +423,7 @@ class OSSFileSystem(AbstractFileSystem):
             self.makedirs(rpath, exist_ok=True)
         else:
             bucket_name, obj_name = self.split_path(rpath)
-            connect_timeout = kwargs.get("connect_timeout", None)
+            connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = oss2.Bucket(
                 self._auth,
                 self._endpoint,
