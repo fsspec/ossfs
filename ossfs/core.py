@@ -521,6 +521,12 @@ class OSSFileSystem(AbstractFileSystem):
         """ Get the content of a file """
         return super().cat_file(path, start, end, **kwargs)
 
+    @dynamic_block_size
+    def pipe_file(self, path, value, **kwargs):
+        """Set the bytes of given file"""
+        with self.open(path, "wb", **kwargs) as f_w:
+            f_w.write(value)
+
 
 class OSSFile(AbstractBufferedFile):
     """A file living in OSSFileSystem"""
