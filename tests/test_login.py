@@ -57,4 +57,4 @@ def test_sts_login(endpoint, test_bucket_name):
 def test_anonymous_login():
     """test anonymous login"""
     ossfs = OSSFileSystem(endpoint="http://oss-cn-hangzhou.aliyuncs.com")
-    ossfs.ls("/dvc-test-anonymous/LICENSE")
+    ossfs.ls("/dvc-test-anonymous/LICENSE", connect_timeout=600)

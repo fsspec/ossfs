@@ -78,3 +78,13 @@ def test_pickle(ossfs, test_path):
     assert ossfs.ls(path) == ossfs1.ls(path)
     ossfs2 = pickle.loads(pickle.dumps(ossfs1))
     assert ossfs.ls(path) == ossfs2.ls(path)
+
+
+def test_strip_protocol():
+    """
+    Test protocols
+    """
+    address = "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
+    assert OSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
+    address = "oss://mybucket/myobject"
+    assert OSSFileSystem._strip_protocol(address) == "/mybucket/myobject"

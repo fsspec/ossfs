@@ -290,17 +290,17 @@ def test_readinto(ossfs, test_path):
 def test_seek_reads(ossfs, test_path):
     file = test_path + "/test_seek_reads/file"
     with ossfs.open(file, "wb") as f:
-        f.write(b"a" * 175627146)
+        f.write(b"a" * 5627146)
     with ossfs.open(file, "rb", blocksize=100) as f:
-        f.seek(175561610)
+        f.seek(5561610)
         f.read(65536)
 
         f.seek(4)
-        size = 17562198
+        size = 562198
         d2 = f.read(size)
         assert len(d2) == size
 
-        f.seek(17562288)
-        size = 17562187
+        f.seek(562288)
+        size = 562187
         d3 = f.read(size)
         assert len(d3) == size
