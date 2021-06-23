@@ -26,19 +26,21 @@ def dynamic_block_size(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         retry_count = 0
+        block_size = kwargs.pop("block_size", None)
+        if not block_size:
+            block_size = OSSFile.DEFAULT_BLOCK_SIZE
+            user_specified = False
+        else:
+            user_specified = True
 
         while True:
             try:
-                block_size = kwargs.pop("block_size", None)
-                if not block_size:
-                    block_size = OSSFile.DEFAULT_BLOCK_SIZE
-                if retry_count and block_size >= 2:
-                    block_size = block_size // 2
                 return func(*args, block_size=block_size, **kwargs)
             except oss2.exceptions.RequestError as error:
-                retry_count += 1
-                if retry_count > 5:
+                if user_specified or block_size < 2 or retry_count >= 5:
                     raise error
+                block_size = block_size // 2
+                retry_count += 1
 
     return wrapper
 
@@ -517,7 +519,7 @@ class OSSFileSystem(AbstractFileSystem):
     @dynamic_block_size
     def cat_file(self, path, start=None, end=None, **kwargs):
         """ Get the content of a file """
-        super().cat_file(path, start, end, **kwargs)
+        return super().cat_file(path, start, end, **kwargs)
 
 
 class OSSFile(AbstractBufferedFile):
