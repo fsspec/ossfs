@@ -253,7 +253,13 @@ class OSSFileSystem(AbstractFileSystem):
 
         return infos
 
-    def _ls_directory(self, path: str, connect_timeout) -> List[Dict]:
+    def _ls_directory(
+        self,
+        path: str,
+        delimiter: str = "/",
+        prefix: Optional[str] = None,
+        connect_timeout: int = None,
+    ) -> List[Dict]:
         path = path.rstrip("/") + "/"
         bucket_name, directory = self.split_path(path)
         bucket = oss2.Bucket(
@@ -266,8 +272,13 @@ class OSSFileSystem(AbstractFileSystem):
         bucket_path = (
             f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
         )
+        prefix = (
+            directory
+            if not prefix
+            else "/".join([directory.rstrip("/"), prefix])
+        )
         for obj in oss2.ObjectIterator(
-            bucket, prefix=directory, delimiter="/"
+            bucket, prefix=prefix, delimiter=delimiter
         ):
             data = {
                 "name": bucket_path + obj.key,
@@ -292,7 +303,9 @@ class OSSFileSystem(AbstractFileSystem):
         if bucket_name:
             infos = self._ls_object(path, connect_timeout)
             if not infos:
-                infos = self._ls_directory(path, connect_timeout)
+                infos = self._ls_directory(
+                    path, connect_timeout=connect_timeout
+                )
         else:
             infos = self._ls_bucket(connect_timeout)
 
@@ -301,6 +314,57 @@ class OSSFileSystem(AbstractFileSystem):
         if detail:
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
+
+    def find(self, path, maxdepth=None, withdirs=False, **kwargs):
+        """List all files below path.
+
+        Like posix ``find`` command without conditions
+
+        Parameters
+        ----------
+        path : str
+        maxdepth: int or None
+            If not None, the maximum number of levels to descend
+        withdirs: bool
+            Whether to include directory paths in the output. This is True
+            when used by glob, but users usually only want files.
+        kwargs are passed to ``ls``.
+        """
+        path = self._strip_protocol(path)
+        out = {}
+        detail = kwargs.pop("detail", False)
+        prefix = kwargs.pop("prefix", None)
+        if (withdirs or maxdepth) and prefix:
+            raise ValueError(
+                "Can not specify 'prefix' option alongside "
+                "'withdirs'/'maxdepth' options."
+            )
+        if prefix:
+            connect_timeout = kwargs.get("connect_timeout", None)
+            for info in self._ls_directory(
+                path,
+                delimiter="",
+                prefix=prefix,
+                connect_timeout=connect_timeout,
+            ):
+                out.update({info["name"]: info})
+        else:
+            for _, dirs, files in self.walk(
+                path, maxdepth, detail=True, **kwargs
+            ):
+                if withdirs:
+                    files.update(dirs)
+                out.update(
+                    {info["name"]: info for name, info in files.items()}
+                )
+            if self.isfile(path) and path not in out:
+                # walk works on directories, but find should also return [path]
+                # when path happens to be a file
+                out[path] = {}
+        names = sorted(out)
+        if not detail:
+            return names
+        return {name: out[name] for name in names}
 
     @staticmethod
     def _bucket_exist(bucket: oss2.Bucket):
@@ -319,7 +383,9 @@ class OSSFileSystem(AbstractFileSystem):
 
     def _directory_exists(self, dirname: str, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", None)
-        ls_result = self._ls_directory(dirname, connect_timeout)
+        ls_result = self._ls_directory(
+            dirname, connect_timeout=connect_timeout
+        )
         return bool(ls_result)
 
     def exists(self, path, **kwargs):

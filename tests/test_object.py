@@ -427,3 +427,26 @@ def test_leading_forward_slash(ossfs, test_path):
     path = path.lstrip("/")
     assert ossfs.exists(path + "/some/file")
     assert ossfs.exists("/" + path + "/some/file")
+
+
+def test_find_with_prefix(ossfs, test_path):
+    for cursor in range(100):
+        ossfs.touch(test_path + f"/prefixes/test_{cursor}")
+
+    ossfs.touch(test_path + "/prefixes2")
+    assert len(ossfs.find(test_path + "/prefixes")) == 100
+    assert len(ossfs.find(test_path, prefix="prefixes")) == 101
+
+    assert len(ossfs.find(test_path + "/prefixes/test_")) == 0
+    assert len(ossfs.find(test_path + "/prefixes", prefix="test_")) == 100
+    assert len(ossfs.find(test_path + "/prefixes/", prefix="test_")) == 100
+
+    test_1s = ossfs.find(test_path + "/prefixes/test_1")
+    assert len(test_1s) == 1
+    assert test_1s[0] == test_path + "/prefixes/test_1"
+
+    test_1s = ossfs.find(test_path + "/prefixes/", prefix="test_1")
+    assert len(test_1s) == 11
+    assert test_1s == [test_path + "/prefixes/test_1"] + [
+        test_path + f"/prefixes/test_{cursor}" for cursor in range(10, 20)
+    ]
