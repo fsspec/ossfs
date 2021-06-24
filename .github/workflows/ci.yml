@@ -23,7 +23,7 @@ jobs:
     - uses: pre-commit/action@v2.0.2
 
   tests:
-    name: Python ${{ matrix.python-version }}
+    name: ${{ matrix.os }} Python-${{ matrix.pyv}}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
