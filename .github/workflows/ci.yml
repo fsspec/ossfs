@@ -66,4 +66,4 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT}}
           OSS_TEST_BUCKET_NAME: ${{ secrets.OSS_TEST_BUCKET_NAME}}
         shell: bash -l {0}
-        run: pytest tests -vv
+        run: pytest tests --durations=0 -vv
