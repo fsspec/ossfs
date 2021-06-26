@@ -175,13 +175,9 @@ def test_ossfs_ls(ossfs, test_path):
     assert all(isinstance(item, dict) for item in L)
 
 
-def test_ossfs_big_ls(ossfs, test_path):
-    path = test_path + "/test_ossfs_big_ls"
-    for x in range(1200):
-        ossfs.touch(path + "/%i.part" % x)
+def test_ossfs_big_ls(ossfs, test_bucket_name):
+    path = test_bucket_name + "/test_ossfs_big_ls"
     assert len(ossfs.find(path, connect_timeout=600)) == 1200
-    ossfs.rm(path, recursive=True)
-    assert len(ossfs.find(path)) == 0
 
 
 def test_ossfs_glob(ossfs, test_path):
