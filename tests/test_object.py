@@ -177,6 +177,10 @@ def test_ossfs_ls(ossfs, test_path):
 
 def test_ossfs_big_ls(ossfs, test_bucket_name):
     path = test_bucket_name + "/test_ossfs_big_ls"
+    if not ossfs.exists(path):
+        for x in range(1200):
+            ossfs.touch(path + "/%i.part" % x)
+
     assert len(ossfs.find(path, connect_timeout=600)) == 1200
 
 
