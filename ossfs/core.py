@@ -490,14 +490,18 @@ class OSSFileSystem(AbstractFileSystem):
             possible.
         """
 
-        def chunks(lst: list, num: int):
-            for i in range(0, len(lst), num):
-                yield lst[i : i + num]
+        if isinstance(path, list):
+            for file in path:
+                self.rm(file)
 
         bucket_name, _ = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         path = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
         path = [self.split_path(file)[1] for file in path]
+
+        def chunks(lst: list, num: int):
+            for i in range(0, len(lst), num):
+                yield lst[i : i + num]
 
         for files in chunks(path, 1000):
             bucket.batch_delete_objects(files)
