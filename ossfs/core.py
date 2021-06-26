@@ -469,6 +469,7 @@ class OSSFileSystem(AbstractFileSystem):
         if isinstance(path, list):
             for file in path:
                 self._rm(file)
+            return
         bucket_name, obj_name = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         bucket.delete_object(obj_name)
@@ -493,6 +494,7 @@ class OSSFileSystem(AbstractFileSystem):
         if isinstance(path, list):
             for file in path:
                 self.rm(file)
+            return
 
         bucket_name, _ = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
