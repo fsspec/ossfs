@@ -14,7 +14,7 @@ from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
 logger = logging.getLogger("ossfs")
-logging.getLogger("oss2").setLevel(logging.WARNING)
+logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
@@ -466,12 +466,41 @@ class OSSFileSystem(AbstractFileSystem):
         path: str or list of str
             File(s) to delete.
         """
-        if isinstance(path, list):
+        if isinstance(path, str):
             for file in path:
                 self._rm(file)
         bucket_name, obj_name = self.split_path(path)
         bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
         bucket.delete_object(obj_name)
+
+    @error_decorator
+    def rm(self, path, recursive=False, maxdepth=None):
+        """Delete files.
+
+        Parameters
+        ----------
+        path: str or list of str
+            File(s) to delete.
+        recursive: bool
+            If file(s) are directories, recursively delete contents and then
+            also remove the directory
+        maxdepth: int or None
+            Depth to pass to walk for finding files to delete, if recursive.
+            If None, there will be no limit and infinite recursion may be
+            possible.
+        """
+
+        def chunks(lst: list, num: int):
+            for i in range(0, len(lst), num):
+                yield lst[i : i + num]
+
+        bucket_name, _ = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        path = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
+        path = [self.split_path(file)[1] for file in path]
+
+        for files in chunks(path, 1000):
+            bucket.batch_delete_objects(files)
 
     def get_file(self, rpath, lpath, **kwargs):
         """
