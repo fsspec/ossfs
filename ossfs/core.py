@@ -466,7 +466,7 @@ class OSSFileSystem(AbstractFileSystem):
         path: str or list of str
             File(s) to delete.
         """
-        if isinstance(path, str):
+        if isinstance(path, list):
             for file in path:
                 self._rm(file)
         bucket_name, obj_name = self.split_path(path)
