@@ -20,12 +20,12 @@ def test_default_cache_type(init_config, default_cache_type, test_path):
     file = test_path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
     ossfs = OSSFileSystem(**init_config)
-    with ossfs.open(file, "wb") as f_w:
-        f_w.write(data)
+    with ossfs.open(file, "wb") as f:
+        f.write(data)
 
-    with ossfs.open(file, "rb") as f_r:
-        assert isinstance(f_r.cache, fsspec.core.caches[default_cache_type])
-        out = f_r.read(len(data))
+    with ossfs.open(file, "rb") as f:
+        assert isinstance(f.cache, fsspec.core.caches[default_cache_type])
+        out = f.read(len(data))
         assert len(data) == len(out)
         assert out == data
 
