@@ -175,13 +175,13 @@ def test_ossfs_ls(ossfs, test_path):
     assert all(isinstance(item, dict) for item in L)
 
 
-def test_ossfs_big_ls(ossfs, test_path):
-    path = test_path + "/test_ossfs_big_ls"
-    for x in range(1200):
-        ossfs.touch(path + "/%i.part" % x)
+def test_ossfs_big_ls(ossfs, test_bucket_name):
+    path = test_bucket_name + "/test_ossfs_big_ls"
+    if not ossfs.exists(path):
+        for x in range(1200):
+            ossfs.touch(path + "/%i.part" % x)
+
     assert len(ossfs.find(path, connect_timeout=600)) == 1200
-    ossfs.rm(path, recursive=True)
-    assert len(ossfs.find(path)) == 0
 
 
 def test_ossfs_glob(ossfs, test_path):
@@ -429,24 +429,26 @@ def test_leading_forward_slash(ossfs, test_path):
     assert ossfs.exists("/" + path + "/some/file")
 
 
-def test_find_with_prefix(ossfs, test_path):
-    for cursor in range(100):
-        ossfs.touch(test_path + f"/prefixes/test_{cursor}")
+def test_find_with_prefix(ossfs, test_bucket_name):
+    path = test_bucket_name + "/test_find_with_prefix"
+    if not ossfs.exists(path):
+        for cursor in range(100):
+            ossfs.touch(path + f"/prefixes/test_{cursor}")
+        ossfs.touch(path + "/prefixes2")
 
-    ossfs.touch(test_path + "/prefixes2")
-    assert len(ossfs.find(test_path + "/prefixes")) == 100
-    assert len(ossfs.find(test_path, prefix="prefixes")) == 101
+    assert len(ossfs.find(path + "/prefixes")) == 100
+    assert len(ossfs.find(path, prefix="prefixes")) == 101
 
-    assert len(ossfs.find(test_path + "/prefixes/test_")) == 0
-    assert len(ossfs.find(test_path + "/prefixes", prefix="test_")) == 100
-    assert len(ossfs.find(test_path + "/prefixes/", prefix="test_")) == 100
+    assert len(ossfs.find(path + "/prefixes/test_")) == 0
+    assert len(ossfs.find(path + "/prefixes", prefix="test_")) == 100
+    assert len(ossfs.find(path + "/prefixes/", prefix="test_")) == 100
 
-    test_1s = ossfs.find(test_path + "/prefixes/test_1")
+    test_1s = ossfs.find(path + "/prefixes/test_1")
     assert len(test_1s) == 1
-    assert test_1s[0] == test_path + "/prefixes/test_1"
+    assert test_1s[0] == path + "/prefixes/test_1"
 
-    test_1s = ossfs.find(test_path + "/prefixes/", prefix="test_1")
+    test_1s = ossfs.find(path + "/prefixes/", prefix="test_1")
     assert len(test_1s) == 11
-    assert test_1s == [test_path + "/prefixes/test_1"] + [
-        test_path + f"/prefixes/test_{cursor}" for cursor in range(10, 20)
+    assert test_1s == [path + "/prefixes/test_1"] + [
+        path + f"/prefixes/test_{cursor}" for cursor in range(10, 20)
     ]

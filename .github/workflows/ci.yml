@@ -33,7 +33,6 @@ jobs:
         exclude:
         - os: macos-10.15
           pyv: "3.9"
-      max-parallel: 2
 
     steps:
       - uses: actions/checkout@v2.3.4
@@ -66,4 +65,4 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT}}
           OSS_TEST_BUCKET_NAME: ${{ secrets.OSS_TEST_BUCKET_NAME}}
         shell: bash -l {0}
-        run: pytest tests -vv
+        run: pytest tests --durations=0 -vv

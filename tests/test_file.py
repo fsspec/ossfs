@@ -218,7 +218,7 @@ def test_file_status(ossfs, test_path):
 @pytest.mark.parametrize("data_size", [0, 20, 10 * 2 ** 20])
 @pytest.mark.parametrize("append_size", [0, 20, 10 * 2 ** 20])
 def test_append(ossfs, test_path, data_size, append_size):
-    file = test_path + "/test_append/file"
+    file = test_path + "/test_append/file_{}_{}".format(data_size, append_size)
     data = b"1" * data_size
     extra = b"2" * append_size
     with ossfs.open(file, "wb") as f:
