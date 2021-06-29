@@ -542,8 +542,6 @@ class OSSFileSystem(AbstractFileSystem):
                 bucket_name,
                 connect_timeout=connect_timeout,
             )
-            if self._object_exists(bucket, obj_name):
-                raise FileExistsError(rpath)
             oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
 
     @error_decorator

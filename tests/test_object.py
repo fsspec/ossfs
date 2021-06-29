@@ -236,8 +236,6 @@ def test_get_put(ossfs, tmpdir, test_path):
     ossfs.put(local_file, remote_file)
     assert ossfs.exists(remote_file)
     assert ossfs.cat(remote_file) == data
-    with pytest.raises(FileExistsError):
-        ossfs.put(local_file, remote_file)
 
     get_file = str(tmpdir.join("get"))
     ossfs.get(remote_file, get_file)
