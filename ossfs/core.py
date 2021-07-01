@@ -508,28 +508,30 @@ class OSSFileSystem(AbstractFileSystem):
         for files in chunks(path, 1000):
             bucket.batch_delete_objects(files)
 
+    def download_file(self, rpath, lpath, **kwargs):
+        """Download a single file to local"""
+        bucket_name, obj_name = self.split_path(rpath)
+        connect_timeout = kwargs.pop("connect_timeout", None)
+        bucket = oss2.Bucket(
+            self._auth,
+            self._endpoint,
+            bucket_name,
+            connect_timeout=connect_timeout,
+        )
+        oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+
     def get_file(self, rpath, lpath, **kwargs):
         """
         Copy single remote file to local
-        # todo optimization for file larger than 5GB
         """
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
-            bucket_name, obj_name = self.split_path(rpath)
-            connect_timeout = kwargs.pop("connect_timeout", None)
-            bucket = oss2.Bucket(
-                self._auth,
-                self._endpoint,
-                bucket_name,
-                connect_timeout=connect_timeout,
-            )
-            oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+            self.download_file(rpath, lpath, **kwargs)
 
     def put_file(self, lpath, rpath, **kwargs):
         """
         Copy single file to remote
-        # todo optimization for file larger than 5GB
         """
         if os.path.isdir(lpath):
             self.makedirs(rpath, exist_ok=True)
