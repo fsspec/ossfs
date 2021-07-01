@@ -73,6 +73,7 @@ class OSSFileSystem(AbstractFileSystem):
 
     tempdir = "/tmp"
     protocol = "oss"
+    SIMPLE_TRANSFER_THRESHOLD = oss2.defaults.multiget_threshold
 
     def __init__(
         self,
@@ -512,13 +513,17 @@ class OSSFileSystem(AbstractFileSystem):
         """Download a single file to local"""
         bucket_name, obj_name = self.split_path(rpath)
         connect_timeout = kwargs.pop("connect_timeout", None)
+        resumable = kwargs.pop("resumable", False)
         bucket = oss2.Bucket(
             self._auth,
             self._endpoint,
             bucket_name,
             connect_timeout=connect_timeout,
         )
-        oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+        if resumable:
+            oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+        else:
+            bucket.get_object_to_file(obj_name, lpath, **kwargs)
 
     def get_file(self, rpath, lpath, **kwargs):
         """
@@ -544,7 +549,11 @@ class OSSFileSystem(AbstractFileSystem):
                 bucket_name,
                 connect_timeout=connect_timeout,
             )
-            oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
+
+            if os.path.getsize(lpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
+                oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
+            else:
+                bucket.put_object_from_file(obj_name, lpath, **kwargs)
 
     @error_decorator
     def created(self, path):
@@ -627,6 +636,17 @@ class OSSFileSystem(AbstractFileSystem):
         """Set the bytes of given file"""
         with self.open(path, "wb", **kwargs) as f_w:
             f_w.write(value)
+
+    def size(self, path):
+        """Size in bytes of file"""
+        bucket_name, obj_name = self.split_path(path)
+        if not obj_name:
+            return None
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        try:
+            return bucket.head_object(obj_name).content_length
+        except (oss2.exceptions.NoSuchBucket, oss2.exceptions.NoSuchKey):
+            return None
 
 
 class OSSFile(AbstractBufferedFile):
