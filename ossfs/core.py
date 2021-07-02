@@ -10,8 +10,9 @@ from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
+from fsspec.implementations.local import make_path_posix
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
-from fsspec.utils import stringify_path
+from fsspec.utils import other_paths, stringify_path
 
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
@@ -66,13 +67,16 @@ def error_decorator(func):
     return new_func
 
 
-class OSSFileSystem(AbstractFileSystem):
+class OSSFileSystem(
+    AbstractFileSystem
+):  # pylint:disable=too-many-public-methods
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
     """
 
     tempdir = "/tmp"
     protocol = "oss"
+    SIMPLE_TRANSFER_THRESHOLD = oss2.defaults.multiget_threshold
 
     def __init__(
         self,
@@ -508,28 +512,57 @@ class OSSFileSystem(AbstractFileSystem):
         for files in chunks(path, 1000):
             bucket.batch_delete_objects(files)
 
+    def get_path(self, rpath, lpath, **kwargs):
+        """
+        Copy single remote path to local
+        """
+        if self.isdir(rpath):
+            os.makedirs(lpath, exist_ok=True)
+        else:
+            self.get_file(rpath, lpath, **kwargs)
+
     def get_file(self, rpath, lpath, **kwargs):
         """
         Copy single remote file to local
-        # todo optimization for file larger than 5GB
         """
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
+            resumable = kwargs.pop("resumable", False)
             bucket = oss2.Bucket(
                 self._auth,
                 self._endpoint,
                 bucket_name,
                 connect_timeout=connect_timeout,
             )
-            oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+            if resumable:
+                oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+            else:
+                bucket.get_object_to_file(obj_name, lpath, **kwargs)
+
+    def get(self, rpath, lpath, recursive=False, **kwargs):
+        """Copy file(s) to local.
+
+        Copies a specific file or tree of files (if recursive=True). If lpath
+        ends with a "/", it will be assumed to be a directory, and target files
+        will go within. Can submit a list of paths, which may be glob-patterns
+        and will be expanded.
+
+        Calls get_file for each source.
+        """
+
+        if isinstance(lpath, str):
+            lpath = make_path_posix(lpath)
+        rpaths = self.expand_path(rpath, recursive=recursive)
+        lpaths = other_paths(rpaths, lpath)
+        for r_path, l_path in zip(rpaths, lpaths):
+            self.get_path(r_path, l_path, **kwargs)
 
     def put_file(self, lpath, rpath, **kwargs):
         """
         Copy single file to remote
-        # todo optimization for file larger than 5GB
         """
         if os.path.isdir(lpath):
             self.makedirs(rpath, exist_ok=True)
@@ -542,7 +575,11 @@ class OSSFileSystem(AbstractFileSystem):
                 bucket_name,
                 connect_timeout=connect_timeout,
             )
-            oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
+
+            if os.path.getsize(lpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
+                oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
+            else:
+                bucket.put_object_from_file(obj_name, lpath, **kwargs)
 
     @error_decorator
     def created(self, path):
@@ -625,6 +662,17 @@ class OSSFileSystem(AbstractFileSystem):
         """Set the bytes of given file"""
         with self.open(path, "wb", **kwargs) as f_w:
             f_w.write(value)
+
+    def size(self, path):
+        """Size in bytes of file"""
+        bucket_name, obj_name = self.split_path(path)
+        if not obj_name:
+            return None
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        try:
+            return bucket.head_object(obj_name).content_length
+        except (oss2.exceptions.NoSuchBucket, oss2.exceptions.NoSuchKey):
+            return None
 
 
 class OSSFile(AbstractBufferedFile):
