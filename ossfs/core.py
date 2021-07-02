@@ -660,11 +660,12 @@ class OSSFileSystem(
         """ Get the content of a file """
         return super().cat_file(path, start, end, **kwargs)
 
-    @dynamic_block_size
+    @error_decorator
     def pipe_file(self, path, value, **kwargs):
         """Set the bytes of given file"""
-        with self.open(path, "wb", **kwargs) as f_w:
-            f_w.write(value)
+        bucket_name, obj_name = self.split_path(path)
+        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket.put_object(obj_name, value, **kwargs)
 
     def size(self, path):
         """Size in bytes of file"""
