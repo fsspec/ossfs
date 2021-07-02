@@ -383,7 +383,10 @@ class OSSFileSystem(
     def _object_exists(bucket: oss2.Bucket, object_name: str):
         if not object_name:
             return False
-        return bucket.object_exists(object_name)
+        try:
+            return bucket.object_exists(object_name)
+        except oss2.exceptions.ServerError:
+            return False
 
     def _directory_exists(self, dirname: str, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", None)
@@ -411,7 +414,7 @@ class OSSFileSystem(
         if not obj_name:
             return True
 
-        if bucket.object_exists(obj_name):
+        if self._object_exists(bucket, obj_name):
             return True
 
         return self._directory_exists(path, **kwargs)
