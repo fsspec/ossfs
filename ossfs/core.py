@@ -10,8 +10,9 @@ from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
+from fsspec.implementations.local import make_path_posix
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
-from fsspec.utils import stringify_path
+from fsspec.utils import other_paths, stringify_path
 
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
@@ -66,7 +67,9 @@ def error_decorator(func):
     return new_func
 
 
-class OSSFileSystem(AbstractFileSystem):
+class OSSFileSystem(
+    AbstractFileSystem
+):  # pylint:disable=too-many-public-methods
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
     """
@@ -509,21 +512,14 @@ class OSSFileSystem(AbstractFileSystem):
         for files in chunks(path, 1000):
             bucket.batch_delete_objects(files)
 
-    def download_file(self, rpath, lpath, **kwargs):
-        """Download a single file to local"""
-        bucket_name, obj_name = self.split_path(rpath)
-        connect_timeout = kwargs.pop("connect_timeout", None)
-        resumable = kwargs.pop("resumable", False)
-        bucket = oss2.Bucket(
-            self._auth,
-            self._endpoint,
-            bucket_name,
-            connect_timeout=connect_timeout,
-        )
-        if resumable:
-            oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+    def get_path(self, rpath, lpath, **kwargs):
+        """
+        Copy single remote path to local
+        """
+        if self.isdir(rpath):
+            os.makedirs(lpath, exist_ok=True)
         else:
-            bucket.get_object_to_file(obj_name, lpath, **kwargs)
+            self.get_file(rpath, lpath, **kwargs)
 
     def get_file(self, rpath, lpath, **kwargs):
         """
@@ -532,7 +528,37 @@ class OSSFileSystem(AbstractFileSystem):
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
-            self.download_file(rpath, lpath, **kwargs)
+            bucket_name, obj_name = self.split_path(rpath)
+            connect_timeout = kwargs.pop("connect_timeout", None)
+            resumable = kwargs.pop("resumable", False)
+            bucket = oss2.Bucket(
+                self._auth,
+                self._endpoint,
+                bucket_name,
+                connect_timeout=connect_timeout,
+            )
+            if resumable:
+                oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
+            else:
+                bucket.get_object_to_file(obj_name, lpath, **kwargs)
+
+    def get(self, rpath, lpath, recursive=False, **kwargs):
+        """Copy file(s) to local.
+
+        Copies a specific file or tree of files (if recursive=True). If lpath
+        ends with a "/", it will be assumed to be a directory, and target files
+        will go within. Can submit a list of paths, which may be glob-patterns
+        and will be expanded.
+
+        Calls get_file for each source.
+        """
+
+        if isinstance(lpath, str):
+            lpath = make_path_posix(lpath)
+        rpaths = self.expand_path(rpath, recursive=recursive)
+        lpaths = other_paths(rpaths, lpath)
+        for r_path, l_path in zip(rpaths, lpaths):
+            self.get_path(r_path, l_path, **kwargs)
 
     def put_file(self, lpath, rpath, **kwargs):
         """
