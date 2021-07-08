@@ -19,8 +19,6 @@ def test_info(ossfs, test_path):
     ossfs.touch(test_info_b)
     info = ossfs.info(test_info_a)
     linfo = ossfs.ls(test_info_a, detail=True)[0]
-    print(info)
-    print(linfo)
     assert abs(info.pop("LastModified") - linfo.pop("LastModified")) <= 1
     assert info == linfo
 
@@ -155,7 +153,6 @@ def test_du(ossfs, test_path):
     with ossfs.open(file3, "wb") as f:
         f.write(b"1234567890" * 2)
     d = ossfs.du(path, total=False)
-    print(d)
     assert all(isinstance(v, int) and v >= 0 for v in d.values())
     assert d[file1] == 10
     assert d[file2] == 5

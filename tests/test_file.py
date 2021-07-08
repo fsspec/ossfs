@@ -237,7 +237,6 @@ def test_bigger_than_block_read(ossfs, test_bucket_name):
             out.append(data)
             if len(data) == 0:
                 break
-        print(out)
     assert b"".join(out) == b"1234567890\n"
 
 
