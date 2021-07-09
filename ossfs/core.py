@@ -102,6 +102,7 @@ class OSSFileSystem(
             like: http://oss-cn-hangzhou.aliyuncs.com or
                         https://oss-me-east-1.aliyuncs.com
         """
+        super().__init__(**kwargs)
         if token:
             self._auth = oss2.StsAuth(key, secret, token)
         elif key:
@@ -110,7 +111,22 @@ class OSSFileSystem(
             self._auth = oss2.AnonymousAuth()
         self._endpoint = endpoint
         self._default_cache_type = default_cache_type
-        super().__init__(**kwargs)
+        self._session = oss2.Session()
+
+    def _get_bucket(
+        self, bucket_name: str, connect_timeout: Optional[int] = None
+    ):
+        """
+        get the new bucket instance
+        """
+        return oss2.Bucket(
+            self._auth,
+            self._endpoint,
+            bucket_name,
+            session=self._session,
+            connect_timeout=connect_timeout,
+            app_name="ossfs",
+        )
 
     def split_path(self, path: str) -> Tuple[str, str]:
         """
@@ -228,12 +244,7 @@ class OSSFileSystem(
 
     def _ls_object(self, path: str, connect_timeout) -> List[Dict]:
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(
-            self._auth,
-            self._endpoint,
-            bucket_name,
-            connect_timeout=connect_timeout,
-        )
+        bucket = self._get_bucket(bucket_name, connect_timeout)
         infos = []
         if not self._object_exists(bucket, obj_name):
             return infos
@@ -266,12 +277,7 @@ class OSSFileSystem(
     ) -> List[Dict]:
         path = path.rstrip("/") + "/"
         bucket_name, directory = self.split_path(path)
-        bucket = oss2.Bucket(
-            self._auth,
-            self._endpoint,
-            bucket_name,
-            connect_timeout=connect_timeout,
-        )
+        bucket = self._get_bucket(bucket_name, connect_timeout)
         infos = []
         bucket_path = (
             f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
@@ -402,12 +408,7 @@ class OSSFileSystem(
             return False
 
         connect_timeout = kwargs.get("connect_timeout", None)
-        bucket = oss2.Bucket(
-            self._auth,
-            self._endpoint,
-            bucket_name,
-            connect_timeout=connect_timeout,
-        )
+        bucket = self._get_bucket(bucket_name, connect_timeout)
         if not self._bucket_exist(bucket):
             return False
 
@@ -423,7 +424,7 @@ class OSSFileSystem(
     def ukey(self, path):
         """Hash of file properties, to tell if it has changed"""
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         obj_stream = bucket.get_object(obj_name)
         return obj_stream.server_crc
 
@@ -456,12 +457,7 @@ class OSSFileSystem(
             os.remove(tempdir)
         else:
             connect_timeout = kwargs.pop("connect_timeout", None)
-            bucket = oss2.Bucket(
-                self._auth,
-                self._endpoint,
-                bucket_name1,
-                connect_timeout=connect_timeout,
-            )
+            bucket = self._get_bucket(bucket_name1, connect_timeout)
             bucket.copy_object(bucket_name1, obj_name1, obj_name2)
 
     @error_decorator
@@ -478,7 +474,7 @@ class OSSFileSystem(
                 self._rm(file)
             return
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         bucket.delete_object(obj_name)
 
     @error_decorator
@@ -504,7 +500,7 @@ class OSSFileSystem(
             return
 
         bucket_name, _ = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         path = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
         path = [self.split_path(file)[1] for file in path]
 
@@ -534,12 +530,7 @@ class OSSFileSystem(
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
             resumable = kwargs.pop("resumable", False)
-            bucket = oss2.Bucket(
-                self._auth,
-                self._endpoint,
-                bucket_name,
-                connect_timeout=connect_timeout,
-            )
+            bucket = self._get_bucket(bucket_name, connect_timeout)
             if resumable:
                 oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
             else:
@@ -572,13 +563,7 @@ class OSSFileSystem(
         else:
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
-            bucket = oss2.Bucket(
-                self._auth,
-                self._endpoint,
-                bucket_name,
-                connect_timeout=connect_timeout,
-            )
-
+            bucket = self._get_bucket(bucket_name, connect_timeout)
             if os.path.getsize(lpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
             else:
@@ -590,7 +575,7 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         if obj_name:
             raise NotImplementedError("OSS has no created timestamp")
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         timestamp = bucket.get_bucket_info().creation_date
         return datetime.fromtimestamp(timestamp)
 
@@ -600,7 +585,7 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         if not obj_name or self.isdir(path):
             raise NotImplementedError("bucket has no modified timestamp")
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         simplifiedmeta = bucket.get_object_meta(obj_name)
         return int(
             datetime.strptime(
@@ -615,7 +600,7 @@ class OSSFileSystem(
         Append bytes to the object
         """
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         result = bucket.append_object(obj_name, location, value)
         return result.next_position
 
@@ -626,7 +611,7 @@ class OSSFileSystem(
         """
         headers = {"x-oss-range-behavior": "standard"}
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         try:
             object_stream = bucket.get_object(
                 obj_name, byte_range=(start, end), headers=headers
@@ -664,7 +649,7 @@ class OSSFileSystem(
     def pipe_file(self, path, value, **kwargs):
         """Set the bytes of given file"""
         bucket_name, obj_name = self.split_path(path)
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         bucket.put_object(obj_name, value, **kwargs)
 
     def size(self, path):
@@ -672,7 +657,7 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         if not obj_name:
             return None
-        bucket = oss2.Bucket(self._auth, self._endpoint, bucket_name)
+        bucket = self._get_bucket(bucket_name)
         try:
             return bucket.head_object(obj_name).content_length
         except (oss2.exceptions.NoSuchBucket, oss2.exceptions.NoSuchKey):

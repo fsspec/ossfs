@@ -39,7 +39,6 @@ def test_cache_type(ossfs, cache_type, test_path):
         f.write(data)
 
     with ossfs.open(file, "rb", cache_type=cache_type) as f:
-        print(f.cache)
         assert isinstance(f.cache, fsspec.core.caches[cache_type])
         out = f.read(len(data))
         assert len(data) == len(out)
