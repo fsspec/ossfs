@@ -5,6 +5,7 @@ Test all OSSFile related methods
 # pylint:disable=missing-function-docstring
 # pylint:disable=protected-access
 import io
+import os
 
 import pytest
 
@@ -22,7 +23,7 @@ glob_files = {"file.dat": b"", "filexdat": b""}
 
 def test_simple(ossfs, test_path):
     file = test_path + "/test_simple/file"
-    data = b"a" * (10 * 2 ** 20)
+    data = os.urandom(10 * 2 ** 20)
 
     with ossfs.open(file, "wb") as f:
         f.write(data)
@@ -95,7 +96,7 @@ def test_read_ossfs_block(ossfs, test_bucket_name):
 @pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
 def test_write(ossfs, test_path, size):
     file = test_path + "/test_write/file"
-    data = b"0" * size
+    data = os.urandom(size)
     with ossfs.open(file, "wb") as f:
         f.write(data)
     assert ossfs.cat(file) == data
@@ -120,15 +121,15 @@ def test_write_fails(ossfs, test_path):
 def test_write_blocks(ossfs, test_path):
     file = test_path + "/test_write_blocks/temp"
     with ossfs.open(file, "wb") as f:
-        f.write(b"a" * 2 * 2 ** 20)
+        f.write(os.urandom(2 * 2 ** 20))
         assert f.buffer.tell() == 2 * 2 ** 20
         f.flush()
         assert f.buffer.tell() == 2 * 2 ** 20
-        f.write(b"a" * 2 * 2 ** 20)
-        f.write(b"a" * 2 * 2 ** 20)
+        f.write(os.urandom(2 * 2 ** 20))
+        f.write(os.urandom(2 * 2 ** 20))
     assert ossfs.info(file)["Size"] == 6 * 2 ** 20
     with ossfs.open(file, "wb", block_size=10 * 2 ** 20) as f:
-        f.write(b"a" * 15 * 2 ** 20)
+        f.write(os.urandom(15 * 2 ** 20))
         assert f.buffer.tell() == 0
     assert ossfs.info(file)["Size"] == 15 * 2 ** 20
 
@@ -219,8 +220,8 @@ def test_file_status(ossfs, test_path):
 @pytest.mark.parametrize("append_size", [0, 20, 10 * 2 ** 20])
 def test_append(ossfs, test_path, data_size, append_size):
     file = test_path + "/test_append/file_{}_{}".format(data_size, append_size)
-    data = b"1" * data_size
-    extra = b"2" * append_size
+    data = os.urandom(data_size)
+    extra = os.urandom(append_size)
     with ossfs.open(file, "wb") as f:
         f.write(data)
     assert ossfs.cat(file) == data
@@ -289,7 +290,7 @@ def test_readinto(ossfs, test_path):
 def test_seek_reads(ossfs, test_path):
     file = test_path + "/test_seek_reads/file"
     with ossfs.open(file, "wb") as f:
-        f.write(b"a" * 5627146)
+        f.write(os.urandom(5627146))
     with ossfs.open(file, "rb", blocksize=100) as f:
         f.seek(5561610)
         f.read(65536)
