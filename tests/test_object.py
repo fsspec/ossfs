@@ -224,9 +224,10 @@ def test_move(ossfs, test_bucket_name, test_path):
     assert not ossfs.exists(from_file)
 
 
-def test_get_put(ossfs, tmpdir, test_path):
+@pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
+def test_get_put(ossfs, tmpdir, test_path, size):
     local_file = str(tmpdir.join("number"))
-    data = b"1234567890\n"
+    data = os.urandom(size)
     open(local_file, "wb").write(data)
 
     remote_file = test_path + "/test_get_put/file"
@@ -237,18 +238,6 @@ def test_get_put(ossfs, tmpdir, test_path):
     get_file = str(tmpdir.join("get"))
     ossfs.get(remote_file, get_file)
     assert open(get_file, "rb").read() == data
-
-
-def test_get_put_big(ossfs, tmpdir, test_path):
-    bigfile = test_path + "/test_get_put_big/bigfile"
-    test_file = str(tmpdir.join("test"))
-    data = b"1234567890A" * 2 ** 20
-    open(test_file, "wb").write(data)
-
-    ossfs.put(test_file, bigfile, connect_timeout=600)
-    test_file = str(tmpdir.join("test2"))
-    ossfs.get(bigfile, test_file, connect_timeout=600)
-    assert open(test_file, "rb").read() == data
 
 
 @pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
