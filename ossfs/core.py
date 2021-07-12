@@ -1,6 +1,7 @@
 """
 Code of OSSFileSystem and OSSFile
 """
+import copy
 import logging
 import os
 import re
@@ -312,19 +313,21 @@ class OSSFileSystem(
         bucket_name, key = self.split_path(norm_path)
         if not prefix:
             prefix = ""
-        if key:
-            prefix = f"{key}/{prefix}"
 
         if not delimiter or prefix:
+            if key:
+                prefix = f"{key}/{prefix}"
             infos = self._get_object_info_list(
                 bucket_name, prefix, delimiter, connect_timeout
             )
         else:
+            if key:
+                prefix = f"{key}/"
             if norm_path not in self.dircache:
                 self.dircache[norm_path] = self._get_object_info_list(
                     bucket_name, prefix, delimiter, connect_timeout
                 )
-            infos = self.dircache[norm_path]
+            infos = copy.deepcopy(self.dircache[norm_path])
         if path.startswith("/"):
             for info in infos:
                 info["name"] = f'/{info["name"]}'
@@ -335,9 +338,12 @@ class OSSFileSystem(
         connect_timeout = kwargs.pop("connect_timeout", 60)
         bucket_name, _ = self.split_path(path)
         if bucket_name:
-            infos = self._ls_object(path, connect_timeout)
-            if not infos:
+            try:
                 infos = self._ls_dir(path, connect_timeout=connect_timeout)
+            except oss2.exceptions.AccessDenied:
+                infos = []
+            if not infos:
+                infos = self._ls_object(path, connect_timeout)
         else:
             infos = self._ls_bucket(connect_timeout)
 
@@ -682,6 +688,7 @@ class OSSFileSystem(
             self.dircache.clear()
         else:
             path = self._strip_protocol(path)
+            path = path.lstrip("/")
             self.dircache.pop(path, None)
             while path:
                 self.dircache.pop(path, None)
