@@ -268,31 +268,25 @@ class OSSFileSystem(
 
         return infos
 
-    def _ls_directory(
+    def _get_object_info_list(
         self,
-        path: str,
-        delimiter: str = "/",
-        prefix: Optional[str] = None,
-        connect_timeout: int = None,
-    ) -> List[Dict]:
-        path = path.rstrip("/") + "/"
-        bucket_name, directory = self.split_path(path)
+        bucket_name: str,
+        prefix: str,
+        delimiter: str,
+        connect_timeout: int,
+    ):
+        """
+        Wrap oss2.ObjectIterator return values into a
+        fsspec form of file info
+        """
         bucket = self._get_bucket(bucket_name, connect_timeout)
         infos = []
-        bucket_path = (
-            f"/{bucket_name}/" if path.startswith("/") else f"{bucket_name}/"
-        )
-        prefix = (
-            directory
-            if not prefix
-            else "/".join([directory.rstrip("/"), prefix])
-        )
         for obj in oss2.ObjectIterator(
             bucket, prefix=prefix, delimiter=delimiter
         ):
             data = {
-                "name": bucket_path + obj.key,
-                "Key": bucket_path + obj.key,
+                "name": f"{bucket_name}/{obj.key}",
+                "Key": f"{bucket_name}/{obj.key}",
                 "type": "file",
                 "size": obj.size,
                 "Size": obj.size,
@@ -307,15 +301,43 @@ class OSSFileSystem(
             infos.append(data)
         return infos
 
+    def _ls_dir(
+        self,
+        path: str,
+        delimiter: str = "/",
+        prefix: Optional[str] = None,
+        connect_timeout: int = None,
+    ) -> List[Dict]:
+        norm_path = path.strip("/")
+        bucket_name, key = self.split_path(norm_path)
+        if not prefix:
+            prefix = ""
+        if key:
+            prefix = f"{key}/{prefix}"
+
+        if not delimiter or prefix:
+            infos = self._get_object_info_list(
+                bucket_name, prefix, delimiter, connect_timeout
+            )
+        else:
+            if norm_path not in self.dircache:
+                self.dircache[norm_path] = self._get_object_info_list(
+                    bucket_name, prefix, delimiter, connect_timeout
+                )
+            infos = self.dircache[norm_path]
+        if path.startswith("/"):
+            for info in infos:
+                info["name"] = f'/{info["name"]}'
+                info["Key"] = f'/{info["Key"]}'
+        return infos
+
     def ls(self, path, detail=True, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", 60)
         bucket_name, _ = self.split_path(path)
         if bucket_name:
             infos = self._ls_object(path, connect_timeout)
             if not infos:
-                infos = self._ls_directory(
-                    path, connect_timeout=connect_timeout
-                )
+                infos = self._ls_dir(path, connect_timeout=connect_timeout)
         else:
             infos = self._ls_bucket(connect_timeout)
 
@@ -351,7 +373,7 @@ class OSSFileSystem(
             )
         if prefix:
             connect_timeout = kwargs.get("connect_timeout", None)
-            for info in self._ls_directory(
+            for info in self._ls_dir(
                 path,
                 delimiter="",
                 prefix=prefix,
@@ -396,9 +418,7 @@ class OSSFileSystem(
 
     def _directory_exists(self, dirname: str, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", None)
-        ls_result = self._ls_directory(
-            dirname, connect_timeout=connect_timeout
-        )
+        ls_result = self._ls_dir(dirname, connect_timeout=connect_timeout)
         return bool(ls_result)
 
     def exists(self, path, **kwargs):
@@ -459,6 +479,7 @@ class OSSFileSystem(
             connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = self._get_bucket(bucket_name1, connect_timeout)
             bucket.copy_object(bucket_name1, obj_name1, obj_name2)
+        self.invalidate_cache(self._parent(path2))
 
     @error_decorator
     def _rm(self, path: Union[str, List[str]]):
@@ -476,6 +497,7 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         bucket = self._get_bucket(bucket_name)
         bucket.delete_object(obj_name)
+        self.invalidate_cache(self._parent(path))
 
     @error_decorator
     def rm(self, path, recursive=False, maxdepth=None):
@@ -501,15 +523,19 @@ class OSSFileSystem(
 
         bucket_name, _ = self.split_path(path)
         bucket = self._get_bucket(bucket_name)
-        path = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
-        path = [self.split_path(file)[1] for file in path]
+        path_expand = self.expand_path(
+            path, recursive=recursive, maxdepth=maxdepth
+        )
+        path_expand = [self.split_path(file)[1] for file in path_expand]
 
         def chunks(lst: list, num: int):
             for i in range(0, len(lst), num):
                 yield lst[i : i + num]
 
-        for files in chunks(path, 1000):
+        for files in chunks(path_expand, 1000):
             bucket.batch_delete_objects(files)
+
+        self.invalidate_cache(self._parent(path))
 
     def get_path(self, rpath, lpath, **kwargs):
         """
@@ -529,9 +555,8 @@ class OSSFileSystem(
         else:
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
-            resumable = kwargs.pop("resumable", False)
             bucket = self._get_bucket(bucket_name, connect_timeout)
-            if resumable:
+            if self.size(rpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
             else:
                 bucket.get_object_to_file(obj_name, lpath, **kwargs)
@@ -568,6 +593,7 @@ class OSSFileSystem(
                 oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
             else:
                 bucket.put_object_from_file(obj_name, lpath, **kwargs)
+        self.invalidate_cache(self._parent(rpath))
 
     @error_decorator
     def created(self, path):
@@ -639,6 +665,7 @@ class OSSFileSystem(
         if truncate or not self.exists(path):
             with self.open(path, "wb", **kwargs):
                 pass
+            self.invalidate_cache(self._parent(path))
 
     @dynamic_block_size
     def cat_file(self, path, start=None, end=None, **kwargs):
@@ -651,17 +678,17 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         bucket = self._get_bucket(bucket_name)
         bucket.put_object(obj_name, value, **kwargs)
+        self.invalidate_cache(self._parent(path))
 
-    def size(self, path):
-        """Size in bytes of file"""
-        bucket_name, obj_name = self.split_path(path)
-        if not obj_name:
-            return None
-        bucket = self._get_bucket(bucket_name)
-        try:
-            return bucket.head_object(obj_name).content_length
-        except (oss2.exceptions.NoSuchBucket, oss2.exceptions.NoSuchKey):
-            return None
+    def invalidate_cache(self, path=None):
+        if path is None:
+            self.dircache.clear()
+        else:
+            path = self._strip_protocol(path)
+            self.dircache.pop(path, None)
+            while path:
+                self.dircache.pop(path, None)
+                path = self._parent(path)
 
 
 class OSSFile(AbstractBufferedFile):
