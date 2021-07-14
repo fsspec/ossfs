@@ -7,6 +7,7 @@ Test all oss object related methods
 import os
 import time
 
+import fsspec
 import pytest
 
 
@@ -441,3 +442,45 @@ def test_find_with_prefix(ossfs, test_bucket_name):
     assert test_1s == [path + "/prefixes/test_1"] + [
         path + f"/prefixes/test_{cursor}" for cursor in range(10, 20)
     ]
+
+
+WRITE_BLOCK_SIZE = 2 ** 13  # 8KB blocks
+READ_BLOCK_SIZE = 2 ** 14  # 16KB blocks
+
+
+def test_get_put_file(ossfs, tmpdir, test_bucket_name):
+    src_file = str(tmpdir / "source")
+    src2_file = str(tmpdir / "source_2")
+    dest_file = test_bucket_name + "/get_put_file/dest"
+
+    data = b"test" * 2 ** 20
+
+    # pylint: disable=missing-class-docstring
+    class EventLogger(fsspec.Callback):
+        def __init__(self):
+            self.events = []
+            super().__init__()
+
+        def set_size(self, size):
+            self.events.append(("set_size", size))
+
+        def absolute_update(self, value):
+            self.events.append(("absolute_update", value))
+
+    with open(src_file, "wb") as stream:
+        stream.write(data)
+
+    event_logger = EventLogger()
+    ossfs.put_file(src_file, dest_file, callback=event_logger)
+    assert ossfs.exists(dest_file)
+
+    assert event_logger.events[0] == ("set_size", len(data))
+    assert len(event_logger.events[1:]) == len(data) // WRITE_BLOCK_SIZE
+
+    event_logger = EventLogger()
+    ossfs.get_file(dest_file, src2_file, callback=event_logger)
+    with open(src2_file, "rb") as stream:
+        assert stream.read() == data
+
+    assert event_logger.events[0] == ("set_size", len(data))
+    assert len(event_logger.events[1:]) == len(data) // READ_BLOCK_SIZE
