@@ -11,9 +11,8 @@ from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
-from fsspec.implementations.local import make_path_posix
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
-from fsspec.utils import other_paths, stringify_path
+from fsspec.utils import stringify_path
 
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
@@ -549,7 +548,9 @@ class OSSFileSystem(
         else:
             self.get_file(rpath, lpath, **kwargs)
 
-    def get_file(self, rpath, lpath, **kwargs):
+    def get_file(
+        self, rpath, lpath, **kwargs
+    ):  # pylint: disable=arguments-differ
         """
         Copy single remote file to local
         """
@@ -564,25 +565,9 @@ class OSSFileSystem(
             else:
                 bucket.get_object_to_file(obj_name, lpath, **kwargs)
 
-    def get(self, rpath, lpath, recursive=False, **kwargs):
-        """Copy file(s) to local.
-
-        Copies a specific file or tree of files (if recursive=True). If lpath
-        ends with a "/", it will be assumed to be a directory, and target files
-        will go within. Can submit a list of paths, which may be glob-patterns
-        and will be expanded.
-
-        Calls get_file for each source.
-        """
-
-        if isinstance(lpath, str):
-            lpath = make_path_posix(lpath)
-        rpaths = self.expand_path(rpath, recursive=recursive)
-        lpaths = other_paths(rpaths, lpath)
-        for r_path, l_path in zip(rpaths, lpaths):
-            self.get_path(r_path, l_path, **kwargs)
-
-    def put_file(self, lpath, rpath, **kwargs):
+    def put_file(
+        self, lpath, rpath, **kwargs
+    ):  # pylint: disable=arguments-differ
         """
         Copy single file to remote
         """
