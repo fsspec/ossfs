@@ -9,7 +9,7 @@ with open("test_requirements.txt") as f_r:
 
 setup(
     name="ossfs",
-    version="2021.7.3",
+    version="2021.7.4",
     description="fsspec filesystem for OSS",
     long_description=open("README.md", "r", encoding="UTF-8").read(),
     author="Yanxiang Gao",
