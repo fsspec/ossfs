@@ -4,7 +4,7 @@ Modules Distributions.
 
 from setuptools import find_packages, setup
 
-with open("requirements.txt") as f_r:
+with open("test_requirements.txt") as f_r:
     tests_requirements = [line.strip() for line in f_r.readlines()]
 
 setup(
