@@ -67,6 +67,23 @@ def error_decorator(func):
     return new_func
 
 
+def _as_progress_handler(callback):
+    if callback is None:
+        return None
+
+    sent_total = False
+
+    def progress_handler(absolute_progress, total_size):
+        nonlocal sent_total
+        if not sent_total:
+            callback.set_size(total_size)
+            sent_total = True
+
+        callback.absolute_update(absolute_progress)
+
+    return progress_handler
+
+
 class OSSFileSystem(
     AbstractFileSystem
 ):  # pylint:disable=too-many-public-methods
@@ -549,11 +566,12 @@ class OSSFileSystem(
             self.get_file(rpath, lpath, **kwargs)
 
     def get_file(
-        self, rpath, lpath, **kwargs
+        self, rpath, lpath, callback=None, **kwargs
     ):  # pylint: disable=arguments-differ
         """
         Copy single remote file to local
         """
+        kwargs.setdefault("progress_callback", _as_progress_handler(callback))
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
         else:
@@ -566,11 +584,12 @@ class OSSFileSystem(
                 bucket.get_object_to_file(obj_name, lpath, **kwargs)
 
     def put_file(
-        self, lpath, rpath, **kwargs
+        self, lpath, rpath, callback=None, **kwargs
     ):  # pylint: disable=arguments-differ
         """
         Copy single file to remote
         """
+        kwargs.setdefault("progress_callback", _as_progress_handler(callback))
         if os.path.isdir(lpath):
             self.makedirs(rpath, exist_ok=True)
         else:
