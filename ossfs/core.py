@@ -60,7 +60,10 @@ def error_decorator(func):
             oss2.exceptions.NoSuchKey,
         ) as err:
             raise FileNotFoundError(path) from err
-        except oss2.exceptions.ServerError as err:
+        except (
+            oss2.exceptions.ServerError,
+            oss2.exceptions.ClientError,
+        ) as err:
             raise ValueError(path) from err
         return result
 

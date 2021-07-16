@@ -9,14 +9,14 @@ with open("test_requirements.txt") as f_r:
 
 setup(
     name="ossfs",
-    version="2021.7.4",
+    version="2021.7.5",
     description="fsspec filesystem for OSS",
     long_description=open("README.md", "r", encoding="UTF-8").read(),
     author="Yanxiang Gao",
     author_email="gao@iterive.ai",
     download_url="https://github.com/iterative/ossfs",
     license="Apache-2.0 License",
-    install_requires=["fsspec>=2021.7.0", "oss2==2.6.1"],
+    install_requires=["fsspec>=2021.7.0", "oss2>=2.6.1"],
     extras_require={"tests": tests_requirements},
     keywords="oss, fsspec",
     python_requires=">=3.6",
