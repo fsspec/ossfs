@@ -129,9 +129,25 @@ class OSSFileSystem(
             self._auth = oss2.Auth(key, secret)
         else:
             self._auth = oss2.AnonymousAuth()
-        self._endpoint = endpoint
+        self._endpoint = endpoint or os.getenv("OSS_ENDPOINT", None)
+        if self._endpoint is None:
+            logger.warning(
+                "OSS endpoint is not setted, OSSFS could not work properly"
+                "without a endpoint, please set it manually with "
+                "`ossfs.set_endpoint` later"
+            )
         self._default_cache_type = default_cache_type
         self._session = oss2.Session()
+
+    def set_endpoint(self, endpoint: str):
+        """
+        Reset the endpoint for ossfs
+        endpoint : string (None)
+            Defualt endpoints of the fs
+            Endpoints are the adderss where OSS locate
+            like: http://oss-cn-hangzhou.aliyuncs.com or
+        """
+        self._endpoint = endpoint
 
     def _get_bucket(
         self, bucket_name: str, connect_timeout: Optional[int] = None
@@ -139,6 +155,8 @@ class OSSFileSystem(
         """
         get the new bucket instance
         """
+        if not self._endpoint:
+            raise ValueError("endpoint is required")
         return oss2.Bucket(
             self._auth,
             self._endpoint,
