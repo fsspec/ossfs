@@ -38,7 +38,7 @@ def test_bucket_name():
 
 @pytest.fixture()
 def test_path(test_bucket_name):
-    return f"/{test_bucket_name}/{test_id}"
+    return f"/{test_bucket_name}/ossfs_test/{test_id}"
 
 
 @pytest.fixture()

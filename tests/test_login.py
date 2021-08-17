@@ -75,4 +75,4 @@ def test_env_endpoint(endpoint, test_bucket_name, monkeypatch):
 
 def test_anonymous_login():
     ossfs = OSSFileSystem(endpoint="http://oss-cn-hangzhou.aliyuncs.com")
-    ossfs.ls("/dvc-test-anonymous/LICENSE", connect_timeout=600)
+    ossfs.cat("/dvc-test-anonymous/LICENSE", connect_timeout=600)

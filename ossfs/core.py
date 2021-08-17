@@ -385,7 +385,7 @@ class OSSFileSystem(
             infos = self._ls_bucket(connect_timeout)
 
         if not infos:
-            raise FileNotFoundError(path)
+            return infos
         if detail:
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
