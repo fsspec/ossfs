@@ -9,9 +9,8 @@ with open("test_requirements.txt") as f_r:
 
 setup(
     name="ossfs",
-    version="2021.7.5",
+    version="2021.8.0",
     description="fsspec filesystem for OSS",
-    long_description=open("README.md", "r", encoding="UTF-8").read(),
     author="Yanxiang Gao",
     author_email="gao@iterive.ai",
     download_url="https://github.com/iterative/ossfs",
