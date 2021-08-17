@@ -7,14 +7,10 @@ from setuptools import find_packages, setup
 with open("test_requirements.txt") as f_r:
     tests_requirements = [line.strip() for line in f_r.readlines()]
 
-with open("README.md", "r", encoding="UTF-8") as f_r:
-    description = f_r.read()
-
 setup(
     name="ossfs",
     version="2021.8.0",
     description="fsspec filesystem for OSS",
-    long_description=description,
     author="Yanxiang Gao",
     author_email="gao@iterive.ai",
     download_url="https://github.com/iterative/ossfs",
