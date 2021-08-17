@@ -4,6 +4,7 @@ Test all oss object related methods
 # pylint:disable=invalid-name
 # pylint:disable=missing-function-docstring
 # pylint:disable=protected-access
+# pylint:disable=consider-using-with
 import os
 import time
 
@@ -62,8 +63,7 @@ def test_checksum(ossfs, test_path):
 
 def test_ls_object(ossfs, test_path):
     path = test_path + "/test_ls_object/"
-    with pytest.raises(FileNotFoundError):
-        ossfs.ls(test_path + "/nonexistent")
+    assert ossfs.ls(test_path + "/nonexistent") == []
     fn = path + "accounts.1.json"
     ossfs.touch(fn)
     assert fn in ossfs.ls(path, detail=False)
