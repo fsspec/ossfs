@@ -6,47 +6,18 @@ import logging
 import os
 import re
 from datetime import datetime
-from functools import wraps
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
 import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
-from funcy.flow import collecting, retry
 
 from ossfs.exceptions import translate_boto_error
 
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-
-def dynamic_block_size(func):
-    """
-    dynamic ajust block size on connection errors
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        retry_count = 0
-        block_size = kwargs.pop("block_size", None)
-        if not block_size:
-            block_size = OSSFile.DEFAULT_BLOCK_SIZE
-            user_specified = False
-        else:
-            user_specified = True
-
-        while True:
-            try:
-                return func(*args, block_size=block_size, **kwargs)
-            except oss2.exceptions.RequestError as error:
-                if user_specified or block_size < 2 or retry_count >= 5:
-                    raise error
-                block_size = block_size // 2
-                retry_count += 1
-
-    return wrapper
 
 
 def _as_progress_handler(callback):
@@ -151,13 +122,13 @@ class OSSFileSystem(
         except oss2.exceptions.ClientError as err:
             raise ValueError(bucket_name) from err
 
-    @retry(tries=3, errors=TimeoutError, timeout=1, filter_errors=None)
     def _call_oss(
         self,
         method_name: str,
         *args,
         bucket: Optional[str] = None,
         timeout: Optional[int] = None,
+        retry: int = 3,
         **kwargs,
     ):
         if bucket:
@@ -166,26 +137,30 @@ class OSSFileSystem(
             service = oss2.Service(
                 self._auth, endpoint=self._endpoint, connect_timeout=timeout,
             )
-        try:
-            method = getattr(service, method_name, None)
-            if not method:
-                method = getattr(oss2, method_name)
+        for count in range(retry):
+            try:
+                method = getattr(service, method_name, None)
+                if not method:
+                    method = getattr(oss2, method_name)
+                    logger.debug(
+                        "CALL: %s - %s - %s", method.__name__, args, kwargs
+                    )
+                    out = method(service, *args, **kwargs)
+                else:
+                    logger.debug(
+                        "CALL: %s - %s - %s", method.__name__, args, kwargs
+                    )
+                    out = method(*args, **kwargs)
+                return out
+            except oss2.exceptions.RequestError as err:
                 logger.debug(
-                    "CALL: %s - %s - %s", method.__name__, args, kwargs
+                    "Retryable error: %s, try %s times", err, count + 1
                 )
-                out = method(service, *args, **kwargs)
-            else:
-                logger.debug(
-                    "CALL: %s - %s - %s", method.__name__, args, kwargs
-                )
-                out = method(*args, **kwargs)
-            return out
-        except oss2.exceptions.RequestError as err:
-            logger.debug("Retryable error: %s", err)
-            error = err
-        except oss2.exceptions.OssError as err:
-            logger.debug("Nonretryable error: %s", err)
-            error = err
+                error = err
+            except oss2.exceptions.OssError as err:
+                logger.debug("Nonretryable error: %s", err)
+                error = err
+                break
         raise translate_boto_error(error)
 
     def split_path(self, path: str) -> Tuple[str, str]:
@@ -280,20 +255,23 @@ class OSSFileSystem(
             path = matcher["path"]
         return path or cls.root_marker
 
-    @collecting
     def _ls_bucket(self, connect_timeout) -> List[Dict]:
+        result = []
         for bucket in self._call_oss(
             "BucketIterator", timeout=connect_timeout
         ):
-            yield {
-                "name": bucket.name,
-                "Key": bucket.name,
-                "type": "directory",
-                "size": 0,
-                "Size": 0,
-                "StorageClass": "BUCKET",
-                "CreateTime": bucket.creation_date,
-            }
+            result.append(
+                {
+                    "name": bucket.name,
+                    "Key": bucket.name,
+                    "type": "directory",
+                    "size": 0,
+                    "Size": 0,
+                    "StorageClass": "BUCKET",
+                    "CreateTime": bucket.creation_date,
+                }
+            )
+        return result
 
     def _ls_object(self, path: str, connect_timeout) -> List[Dict]:
         bucket_name, obj_name = self.split_path(path)
@@ -329,7 +307,6 @@ class OSSFileSystem(
             )
         return [info]
 
-    @collecting
     def _get_object_info_list(
         self,
         bucket_name: str,
@@ -341,6 +318,7 @@ class OSSFileSystem(
         Wrap oss2.ObjectIterator return values into a
         fsspec form of file info
         """
+        result = []
         for obj in self._call_oss(
             "ObjectIterator",
             prefix=prefix,
@@ -362,7 +340,8 @@ class OSSFileSystem(
                 data["type"] = "directory"
                 data["size"] = 0
                 data["Size"] = 0
-            yield data
+            result.append(data)
+        return result
 
     def _ls_dir(
         self,
@@ -730,11 +709,6 @@ class OSSFileSystem(
             with self.open(path, "wb", **kwargs):
                 pass
             self.invalidate_cache(self._parent(path))
-
-    @dynamic_block_size
-    def cat_file(self, path, start=None, end=None, **kwargs):
-        """ Get the content of a file """
-        return super().cat_file(path, start, end, **kwargs)
 
     def pipe_file(self, path, value, **kwargs):
         """Set the bytes of given file"""
