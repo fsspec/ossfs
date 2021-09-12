@@ -265,7 +265,7 @@ def test_errors(ossfs, test_path):
         ossfs.open("x", "rb")
 
     with pytest.raises(ValueError):
-        ossfs.rm("unknown")
+        ossfs.rm("/non_exist_bucket")
 
     with pytest.raises(ValueError):
         with ossfs.open(test_path + "/temp", "wb") as f:
