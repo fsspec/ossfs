@@ -6,7 +6,6 @@ import logging
 import os
 import re
 from datetime import datetime
-from functools import wraps
 from hashlib import sha256
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -14,60 +13,11 @@ import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
 
+from ossfs.exceptions import translate_boto_error
+
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
-
-
-def dynamic_block_size(func):
-    """
-    dynamic ajust block size on connection errors
-    """
-
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        retry_count = 0
-        block_size = kwargs.pop("block_size", None)
-        if not block_size:
-            block_size = OSSFile.DEFAULT_BLOCK_SIZE
-            user_specified = False
-        else:
-            user_specified = True
-
-        while True:
-            try:
-                return func(*args, block_size=block_size, **kwargs)
-            except oss2.exceptions.RequestError as error:
-                if user_specified or block_size < 2 or retry_count >= 5:
-                    raise error
-                block_size = block_size // 2
-                retry_count += 1
-
-    return wrapper
-
-
-def error_decorator(func):
-    """
-    Warp oss exceptions to file system exceptions
-    """
-
-    @wraps(func)
-    def new_func(self, path, *args, **kwargs):
-        try:
-            result = func(self, path, *args, **kwargs)
-        except (
-            oss2.exceptions.NoSuchBucket,
-            oss2.exceptions.NoSuchKey,
-        ) as err:
-            raise FileNotFoundError(path) from err
-        except (
-            oss2.exceptions.ServerError,
-            oss2.exceptions.ClientError,
-        ) as err:
-            raise ValueError(path) from err
-        return result
-
-    return new_func
 
 
 def _as_progress_handler(callback):
@@ -90,6 +40,7 @@ def _as_progress_handler(callback):
 class OSSFileSystem(
     AbstractFileSystem
 ):  # pylint:disable=too-many-public-methods
+    # pylint:disable=no-value-for-parameter
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
     """
@@ -147,24 +98,70 @@ class OSSFileSystem(
             Endpoints are the adderss where OSS locate
             like: http://oss-cn-hangzhou.aliyuncs.com or
         """
+        if not endpoint:
+            raise ValueError("Not a valid endpoint")
         self._endpoint = endpoint
 
     def _get_bucket(
         self, bucket_name: str, connect_timeout: Optional[int] = None
-    ):
+    ) -> oss2.Bucket:
         """
         get the new bucket instance
         """
         if not self._endpoint:
             raise ValueError("endpoint is required")
-        return oss2.Bucket(
-            self._auth,
-            self._endpoint,
-            bucket_name,
-            session=self._session,
-            connect_timeout=connect_timeout,
-            app_name="ossfs",
-        )
+        try:
+            return oss2.Bucket(
+                self._auth,
+                self._endpoint,
+                bucket_name,
+                session=self._session,
+                connect_timeout=connect_timeout,
+                app_name="ossfs",
+            )
+        except oss2.exceptions.ClientError as err:
+            raise ValueError(bucket_name) from err
+
+    def _call_oss(
+        self,
+        method_name: str,
+        *args,
+        bucket: Optional[str] = None,
+        timeout: Optional[int] = None,
+        retry: int = 3,
+        **kwargs,
+    ):
+        if bucket:
+            service = self._get_bucket(bucket, timeout)
+        else:
+            service = oss2.Service(
+                self._auth, endpoint=self._endpoint, connect_timeout=timeout,
+            )
+        for count in range(retry):
+            try:
+                method = getattr(service, method_name, None)
+                if not method:
+                    method = getattr(oss2, method_name)
+                    logger.debug(
+                        "CALL: %s - %s - %s", method.__name__, args, kwargs
+                    )
+                    out = method(service, *args, **kwargs)
+                else:
+                    logger.debug(
+                        "CALL: %s - %s - %s", method.__name__, args, kwargs
+                    )
+                    out = method(*args, **kwargs)
+                return out
+            except oss2.exceptions.RequestError as err:
+                logger.debug(
+                    "Retryable error: %s, try %s times", err, count + 1
+                )
+                error = err
+            except oss2.exceptions.OssError as err:
+                logger.debug("Nonretryable error: %s", err)
+                error = err
+                break
+        raise translate_boto_error(error)
 
     def split_path(self, path: str) -> Tuple[str, str]:
         """
@@ -189,7 +186,6 @@ class OSSFileSystem(
         bucket_name, obj_name = path.split("/", 1)
         return bucket_name, obj_name
 
-    @error_decorator
     def _open(
         self,
         path,
@@ -260,14 +256,11 @@ class OSSFileSystem(
         return path or cls.root_marker
 
     def _ls_bucket(self, connect_timeout) -> List[Dict]:
-        service = oss2.Service(
-            self._auth,
-            endpoint=self._endpoint,
-            connect_timeout=connect_timeout,
-        )
-        infos = []
-        for bucket in oss2.BucketIterator(service):
-            infos.append(
+        result = []
+        for bucket in self._call_oss(
+            "BucketIterator", timeout=connect_timeout
+        ):
+            result.append(
                 {
                     "name": bucket.name,
                     "Key": bucket.name,
@@ -278,15 +271,25 @@ class OSSFileSystem(
                     "CreateTime": bucket.creation_date,
                 }
             )
-        return infos
+        return result
 
     def _ls_object(self, path: str, connect_timeout) -> List[Dict]:
         bucket_name, obj_name = self.split_path(path)
-        bucket = self._get_bucket(bucket_name, connect_timeout)
-        infos = []
-        if not self._object_exists(bucket, obj_name):
-            return infos
-        simplifiedmeta = bucket.get_object_meta(obj_name)
+        if not obj_name or not bucket_name:
+            return []
+        if not self._call_oss(
+            "object_exists",
+            obj_name,
+            bucket=bucket_name,
+            timeout=connect_timeout,
+        ):
+            return []
+        simplifiedmeta = self._call_oss(
+            "get_object_meta",
+            obj_name,
+            bucket=bucket_name,
+            timeout=connect_timeout,
+        )
         info = {
             "name": path,
             "Key": path,
@@ -302,9 +305,7 @@ class OSSFileSystem(
                     "%a, %d %b %Y %H:%M:%S %Z",
                 ).timestamp()
             )
-        infos.append(info)
-
-        return infos
+        return [info]
 
     def _get_object_info_list(
         self,
@@ -317,10 +318,13 @@ class OSSFileSystem(
         Wrap oss2.ObjectIterator return values into a
         fsspec form of file info
         """
-        bucket = self._get_bucket(bucket_name, connect_timeout)
-        infos = []
-        for obj in oss2.ObjectIterator(
-            bucket, prefix=prefix, delimiter=delimiter
+        result = []
+        for obj in self._call_oss(
+            "ObjectIterator",
+            prefix=prefix,
+            delimiter=delimiter,
+            bucket=bucket_name,
+            timeout=connect_timeout,
         ):
             data = {
                 "name": f"{bucket_name}/{obj.key}",
@@ -336,8 +340,8 @@ class OSSFileSystem(
                 data["type"] = "directory"
                 data["size"] = 0
                 data["Size"] = 0
-            infos.append(data)
-        return infos
+            result.append(data)
+        return result
 
     def _ls_dir(
         self,
@@ -441,51 +445,45 @@ class OSSFileSystem(
             return names
         return {name: out[name] for name in names}
 
-    @staticmethod
-    def _bucket_exist(bucket: oss2.Bucket):
-        """Is the bucket exists"""
-        try:
-            bucket.get_bucket_info()
-        except oss2.exceptions.OssError:
-            return False
-        return True
-
-    @staticmethod
-    def _object_exists(bucket: oss2.Bucket, object_name: str):
-        if not object_name:
-            return False
-        return bucket.object_exists(object_name)
-
     def _directory_exists(self, dirname: str, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", None)
         ls_result = self._ls_dir(dirname, connect_timeout=connect_timeout)
         return bool(ls_result)
 
+    def _bucket_exist(self, bucket_name):
+        if not bucket_name:
+            return False
+        try:
+            self._call_oss("get_bucket_info", bucket=bucket_name)
+        except oss2.exceptions.OssError:
+            return False
+        return True
+
     def exists(self, path, **kwargs):
         """Is there a file at the given path"""
         bucket_name, obj_name = self.split_path(path)
-        if not bucket_name:
+
+        if not self._bucket_exist(bucket_name):
             return False
 
         connect_timeout = kwargs.get("connect_timeout", None)
-        bucket = self._get_bucket(bucket_name, connect_timeout)
-        if not self._bucket_exist(bucket):
-            return False
-
         if not obj_name:
             return True
 
-        if self._object_exists(bucket, obj_name):
+        if self._call_oss(
+            "object_exists",
+            obj_name,
+            bucket=bucket_name,
+            timeout=connect_timeout,
+        ):
             return True
 
         return self._directory_exists(path, **kwargs)
 
-    @error_decorator
     def ukey(self, path):
         """Hash of file properties, to tell if it has changed"""
         bucket_name, obj_name = self.split_path(path)
-        bucket = self._get_bucket(bucket_name)
-        obj_stream = bucket.get_object(obj_name)
+        obj_stream = self._call_oss("get_object", obj_name, bucket=bucket_name)
         return obj_stream.server_crc
 
     def checksum(self, path):
@@ -517,11 +515,16 @@ class OSSFileSystem(
             os.remove(tempdir)
         else:
             connect_timeout = kwargs.pop("connect_timeout", None)
-            bucket = self._get_bucket(bucket_name1, connect_timeout)
-            bucket.copy_object(bucket_name1, obj_name1, obj_name2)
+            self._call_oss(
+                "copy_object",
+                bucket_name1,
+                obj_name1,
+                obj_name2,
+                bucket=bucket_name1,
+                timeout=connect_timeout,
+            )
         self.invalidate_cache(self._parent(path2))
 
-    @error_decorator
     def _rm(self, path: Union[str, List[str]]):
         """Delete files.
 
@@ -535,12 +538,10 @@ class OSSFileSystem(
                 self._rm(file)
             return
         bucket_name, obj_name = self.split_path(path)
-        bucket = self._get_bucket(bucket_name)
-        bucket.delete_object(obj_name)
+        self._call_oss("delete_object", obj_name, bucket=bucket_name)
         self.invalidate_cache(self._parent(path))
 
-    @error_decorator
-    def rm(self, path, recursive=False, maxdepth=None):
+    def rm(self, path: Union[str, List[str]], recursive=False, maxdepth=None):
         """Delete files.
 
         Parameters
@@ -562,7 +563,6 @@ class OSSFileSystem(
             return
 
         bucket_name, _ = self.split_path(path)
-        bucket = self._get_bucket(bucket_name)
         path_expand = self.expand_path(
             path, recursive=recursive, maxdepth=maxdepth
         )
@@ -573,7 +573,7 @@ class OSSFileSystem(
                 yield lst[i : i + num]
 
         for files in chunks(path_expand, 1000):
-            bucket.batch_delete_objects(files)
+            self._call_oss("batch_delete_objects", files, bucket=bucket_name)
 
         self.invalidate_cache(self._parent(path))
 
@@ -602,7 +602,14 @@ class OSSFileSystem(
             if self.size(rpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
             else:
-                bucket.get_object_to_file(obj_name, lpath, **kwargs)
+                self._call_oss(
+                    "get_object_to_file",
+                    obj_name,
+                    lpath,
+                    bucket=bucket_name,
+                    timeout=connect_timeout,
+                    **kwargs,
+                )
 
     def put_file(
         self, lpath, rpath, callback=None, **kwargs
@@ -620,27 +627,33 @@ class OSSFileSystem(
             if os.path.getsize(lpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
             else:
-                bucket.put_object_from_file(obj_name, lpath, **kwargs)
+                self._call_oss(
+                    "put_object_from_file",
+                    obj_name,
+                    lpath,
+                    bucket=bucket_name,
+                    timeout=connect_timeout,
+                    **kwargs,
+                )
         self.invalidate_cache(self._parent(rpath))
 
-    @error_decorator
     def created(self, path):
         """Return the created timestamp of a file as a datetime.datetime"""
         bucket_name, obj_name = self.split_path(path)
         if obj_name:
             raise NotImplementedError("OSS has no created timestamp")
-        bucket = self._get_bucket(bucket_name)
-        timestamp = bucket.get_bucket_info().creation_date
+        bucket_info = self._call_oss("get_bucket_info", bucket=bucket_name)
+        timestamp = bucket_info.creation_date
         return datetime.fromtimestamp(timestamp)
 
-    @error_decorator
     def modified(self, path):
         """Return the modified timestamp of a file as a datetime.datetime"""
         bucket_name, obj_name = self.split_path(path)
         if not obj_name or self.isdir(path):
             raise NotImplementedError("bucket has no modified timestamp")
-        bucket = self._get_bucket(bucket_name)
-        simplifiedmeta = bucket.get_object_meta(obj_name)
+        simplifiedmeta = self._call_oss(
+            "get_object_meta", obj_name, bucket=bucket_name
+        )
         return int(
             datetime.strptime(
                 simplifiedmeta.headers["Last-Modified"],
@@ -648,27 +661,29 @@ class OSSFileSystem(
             ).timestamp()
         )
 
-    @error_decorator
     def append_object(self, path: str, location: int, value: bytes) -> int:
         """
         Append bytes to the object
         """
         bucket_name, obj_name = self.split_path(path)
-        bucket = self._get_bucket(bucket_name)
-        result = bucket.append_object(obj_name, location, value)
+        result = self._call_oss(
+            "append_object", obj_name, location, value, bucket=bucket_name,
+        )
         return result.next_position
 
-    @error_decorator
     def get_object(self, path: str, start: int, end: int) -> bytes:
         """
         Return object bytes in range
         """
         headers = {"x-oss-range-behavior": "standard"}
         bucket_name, obj_name = self.split_path(path)
-        bucket = self._get_bucket(bucket_name)
         try:
-            object_stream = bucket.get_object(
-                obj_name, byte_range=(start, end), headers=headers
+            object_stream = self._call_oss(
+                "get_object",
+                obj_name,
+                bucket=bucket_name,
+                byte_range=(start, end),
+                headers=headers,
             )
         except oss2.exceptions.ServerError as err:
             raise err
@@ -695,15 +710,12 @@ class OSSFileSystem(
                 pass
             self.invalidate_cache(self._parent(path))
 
-    @dynamic_block_size
-    def cat_file(self, path, start=None, end=None, **kwargs):
-        """ Get the content of a file """
-        return super().cat_file(path, start, end, **kwargs)
-
-    @error_decorator
     def pipe_file(self, path, value, **kwargs):
         """Set the bytes of given file"""
         bucket_name, obj_name = self.split_path(path)
+        self._call_oss(
+            "put_object", obj_name, value, bucket=bucket_name, **kwargs
+        )
         bucket = self._get_bucket(bucket_name)
         bucket.put_object(obj_name, value, **kwargs)
         self.invalidate_cache(self._parent(path))

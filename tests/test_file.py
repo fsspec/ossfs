@@ -107,8 +107,8 @@ def test_write(ossfs, test_path, size):
 
 def test_write_fails(ossfs, test_path):
     file = test_path + "/test_write_fails/temp"
+    ossfs.touch(file)
     with pytest.raises(ValueError):
-        ossfs.touch(file)
         ossfs.open(file, "rb").write(b"hello")
     f = ossfs.open(file, "wb")
     f.close()
