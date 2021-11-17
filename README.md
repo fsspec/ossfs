@@ -1,4 +1,4 @@
-# Sssfs
+# ossfs
 
 Fsspec filesystem for Alibaba Cloud (Aliyun) Object Storage System (OSS)
 
