@@ -132,14 +132,13 @@ def test_bulk_delete(ossfs, test_path):
     )
 
 
-def test_ossfs_file_access(ossfs, test_bucket_name):
-    fn = test_bucket_name + "/number"
+def test_ossfs_file_access(ossfs, number_file):
     data = b"1234567890\n"
-    assert ossfs.cat(fn) == data
-    assert ossfs.head(fn, 3) == data[:3]
-    assert ossfs.tail(fn, 3) == data[-3:]
-    assert ossfs.tail(fn, 10000) == data
-    assert ossfs.info(fn)["Size"] == len(data)
+    assert ossfs.cat(number_file) == data
+    assert ossfs.head(number_file, 3) == data[:3]
+    assert ossfs.tail(number_file, 3) == data[-3:]
+    assert ossfs.tail(number_file, 10000) == data
+    assert ossfs.info(number_file)["Size"] == len(data)
 
 
 def test_du(ossfs, test_path):
@@ -173,16 +172,16 @@ def test_ossfs_ls(ossfs, test_path):
     assert all(isinstance(item, dict) for item in L)
 
 
-def test_ossfs_big_ls(ossfs, test_bucket_name):
-    path = test_bucket_name + "/test_ossfs_big_ls"
+def test_ossfs_big_ls(ossfs, test_path):
+    path = test_path + "/test_ossfs_big_ls"
     if not ossfs.exists(path):
         for x in range(1200):
-            ossfs.touch(path + "/%i.part" % x)
+            ossfs.touch(path + f"/{x}.part")
     files = ossfs.find(path, connect_timeout=600)
     for x in range(1200):
-        file = path + "/%i.part" % x
+        file = path + f"/{x}.part"
         if file not in files:
-            ossfs.touch(path + "/%i.part" % x)
+            ossfs.touch(path + f"/{x}.part")
 
     assert len(ossfs.find(path, connect_timeout=600)) == 1200
 
@@ -210,15 +209,13 @@ def test_ossfs_glob(ossfs, test_path):
     assert fn2 not in ossfs.glob(path + "/nested/file.*")
 
 
-def test_copy(ossfs, test_bucket_name, test_path):
-    number_file = test_bucket_name + "/number"
+def test_copy(ossfs, number_file, test_path):
     new_file = test_path + "/test_copy/file"
     ossfs.copy(number_file, new_file)
     assert ossfs.cat(number_file) == ossfs.cat(new_file)
 
 
-def test_move(ossfs, test_bucket_name, test_path):
-    number_file = test_bucket_name + "/number"
+def test_move(ossfs, number_file, test_path):
     from_file = test_path + "/test_move/from"
     to_file = test_path + "/test_move/to"
     ossfs.copy(number_file, from_file)
@@ -378,7 +375,7 @@ def test_get_file_info_with_selector(ossfs, test_path):
         elif info["name"].rstrip("/").endswith(dir_a):
             assert info["type"] == "directory"
         else:
-            raise ValueError("unexpected path {}".format(info["name"]))
+            raise ValueError(f"unexpected path {info['name']}")
 
 
 def test_same_name_but_no_exact(ossfs, test_path):
@@ -419,8 +416,8 @@ def test_leading_forward_slash(ossfs, test_path):
     assert ossfs.exists("/" + path + "/some/file")
 
 
-def test_find_with_prefix(ossfs, test_bucket_name):
-    path = test_bucket_name + "/test_find_with_prefix"
+def test_find_with_prefix(ossfs, test_path):
+    path = test_path + "/test_find_with_prefix"
     if not ossfs.exists(path):
         for cursor in range(100):
             ossfs.touch(path + f"/prefixes/test_{cursor}")
@@ -448,10 +445,10 @@ WRITE_BLOCK_SIZE = 2 ** 13  # 8KB blocks
 READ_BLOCK_SIZE = 2 ** 14  # 16KB blocks
 
 
-def test_get_put_file(ossfs, tmpdir, test_bucket_name):
+def test_get_put_file(ossfs, tmpdir, test_path):
     src_file = str(tmpdir / "source")
     src2_file = str(tmpdir / "source_2")
-    dest_file = test_bucket_name + "/get_put_file/dest"
+    dest_file = test_path + "/get_put_file/dest"
 
     data = b"test" * 2 ** 20
 
