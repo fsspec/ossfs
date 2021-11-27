@@ -8,17 +8,7 @@ import io
 import os
 
 import pytest
-
-files = {
-    "LICENSE": (
-        b"                                 Apache License\n"
-        b"                           Version 2.0, January 2004\n"
-        b"                        http://www.apache.org/licenses/\n"
-    ),
-    "number": (b"1234567890\n"),
-}
-
-glob_files = {"file.dat": b"", "filexdat": b""}
+from conftest import LICENSE_PATH, NUMBERS
 
 
 def test_simple(ossfs, test_path):
@@ -62,35 +52,36 @@ def test_seek(ossfs, test_path):
             assert f.seek(i) == i
 
 
-def test_read_small(ossfs, test_bucket_name):
-    fn = test_bucket_name + "/number"
-    with ossfs.open(fn, "rb", block_size=3) as f:
+def test_read_small(ossfs, number_file):
+    with ossfs.open(number_file, "rb", block_size=3) as f:
         out = []
         while True:
             data = f.read(2)
             if data == b"":
                 break
             out.append(data)
-        assert ossfs.cat(fn) == b"".join(out)
+        assert ossfs.cat(number_file) == b"".join(out)
 
 
-def test_read_ossfs_block(ossfs, test_bucket_name):
-    data = files["LICENSE"]
+def test_read_ossfs_block(ossfs, license_file, number_file):
+    with open(LICENSE_PATH, "rb") as f_r:
+        data = f_r.read()
     lines = io.BytesIO(data).readlines()
-    path = test_bucket_name + "/LICENSE"
-    assert ossfs.read_block(path, 0, 10, b"\n") == lines[0]
-    assert ossfs.read_block(path, 40, 10, b"\n") == lines[1]
-    assert ossfs.read_block(path, 0, 80, b"\n") == lines[0] + lines[1]
-    assert ossfs.read_block(path, 0, 120, b"\n") == data
+    assert ossfs.read_block(license_file, 0, 10, b"\n") == lines[0]
+    assert ossfs.read_block(license_file, 40, 10, b"\n") == lines[1]
+    assert ossfs.read_block(license_file, 0, 80, b"\n") == lines[0] + lines[1]
+    assert ossfs.read_block(license_file, 0, 120, b"\n") == b"".join(
+        [lines[0], lines[1], lines[2]]
+    )
 
-    data = files["number"]
-    lines = io.BytesIO(data).readlines()
-    path = test_bucket_name + "/number"
-    assert len(ossfs.read_block(path, 0, 5)) == 5
-    assert len(ossfs.read_block(path, 4, 150)) == len(data) - 4
-    assert ossfs.read_block(path, 20, 25) == b""
+    lines = io.BytesIO(NUMBERS).readlines()
+    assert len(ossfs.read_block(number_file, 0, 5)) == 5
+    assert len(ossfs.read_block(number_file, 4, 150)) == len(NUMBERS) - 4
+    assert ossfs.read_block(number_file, 20, 25) == b""
 
-    assert ossfs.read_block(path, 5, None) == ossfs.read_block(path, 5, 25)
+    assert ossfs.read_block(number_file, 5, None) == ossfs.read_block(
+        number_file, 5, 25
+    )
 
 
 @pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
@@ -134,15 +125,18 @@ def test_write_blocks(ossfs, test_path):
     assert ossfs.info(file)["Size"] == 15 * 2 ** 20
 
 
-def test_readline(ossfs, test_bucket_name):
-    all_items = files.items()
-    for k, data in all_items:
-        with ossfs.open("/".join([test_bucket_name, k]), "rb") as f:
-            result = f.readline()
-            expected = data.split(b"\n")[0] + (
-                b"\n" if data.count(b"\n") else b""
-            )
-            assert result == expected
+def test_readline(ossfs, number_file, license_file):
+    with ossfs.open("/".join([number_file]), "rb") as f_r:
+        result = f_r.readline()
+        expected = NUMBERS
+        assert result == expected
+
+    with ossfs.open("/".join([license_file]), "rb") as f_r, open(
+        LICENSE_PATH, "rb"
+    ) as f_l:
+        result = f_r.readline()
+        expected = f_l.readline()
+        assert result == expected
 
 
 def test_readline_empty(ossfs, test_path):
@@ -174,10 +168,10 @@ def test_readline_blocksize(ossfs, test_path):
         assert result == expected
 
 
-def test_next(ossfs, test_bucket_name):
-    expected = files["LICENSE"].split(b"\n")[0] + b"\n"
-    with ossfs.open(test_bucket_name + "/LICENSE") as f:
-        result = next(f)
+def test_next(ossfs, license_file):
+    with open(LICENSE_PATH, "rb") as f_l, ossfs.open(license_file) as f_r:
+        expected = f_l.readline()
+        result = next(f_r)
         assert result == expected
 
 
@@ -219,7 +213,7 @@ def test_file_status(ossfs, test_path):
 @pytest.mark.parametrize("data_size", [0, 20, 10 * 2 ** 20])
 @pytest.mark.parametrize("append_size", [0, 20, 10 * 2 ** 20])
 def test_append(ossfs, test_path, data_size, append_size):
-    file = test_path + "/test_append/file_{}_{}".format(data_size, append_size)
+    file = test_path + f"/test_append/file_{data_size}_{append_size}"
     data = os.urandom(data_size)
     extra = os.urandom(append_size)
     with ossfs.open(file, "wb") as f:
@@ -230,8 +224,8 @@ def test_append(ossfs, test_path, data_size, append_size):
     assert ossfs.cat(file) == data + extra
 
 
-def test_bigger_than_block_read(ossfs, test_bucket_name):
-    with ossfs.open(test_bucket_name + "/number", "rb", block_size=3) as f:
+def test_bigger_than_block_read(ossfs, number_file):
+    with ossfs.open(number_file, "rb", block_size=3) as f:
         out = []
         while True:
             data = f.read(4)
