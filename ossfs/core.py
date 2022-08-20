@@ -135,7 +135,9 @@ class OSSFileSystem(
             service = self._get_bucket(bucket, timeout)
         else:
             service = oss2.Service(
-                self._auth, endpoint=self._endpoint, connect_timeout=timeout,
+                self._auth,
+                endpoint=self._endpoint,
+                connect_timeout=timeout,
             )
         for count in range(retry):
             try:
@@ -668,7 +670,11 @@ class OSSFileSystem(
         """
         bucket_name, obj_name = self.split_path(path)
         result = self._call_oss(
-            "append_object", obj_name, location, value, bucket=bucket_name,
+            "append_object",
+            obj_name,
+            location,
+            value,
+            bucket=bucket_name,
         )
         return result.next_position
 
@@ -750,7 +756,7 @@ class OSSFile(AbstractBufferedFile):
         return True
 
     def _initiate_upload(self):
-        """ Create remote file/upload """
+        """Create remote file/upload"""
         if "a" in self.mode:
             self.loc = 0
             if self.fs.exists(self.path):

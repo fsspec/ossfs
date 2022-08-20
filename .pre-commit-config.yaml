@@ -3,12 +3,12 @@ repos:
       - id: black
         language_version: python3
     repo: https://github.com/ambv/black
-    rev: 19.10b0
+    rev: 22.6.0
   - hooks:
       - id: isort
         language_version: python3
     repo: https://github.com/timothycrosley/isort
-    rev: 5.8.0
+    rev: 5.10.1
   - hooks:
       - id: flake8
         language_version: python3
@@ -18,7 +18,7 @@ repos:
           - flake8-debugger
           - flake8-string-format
     repo: https://gitlab.com/pycqa/flake8
-    rev: 3.9.0
+    rev: 3.9.2
   - hooks:
       -  id: mypy
          language_version: python3
@@ -39,5 +39,5 @@ repos:
         id: beautysh
         language_version: python3
     repo: https://github.com/lovesegfault/beautysh
-    rev: 6.0.1
+    rev: v6.2.1
 

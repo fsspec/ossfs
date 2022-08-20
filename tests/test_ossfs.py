@@ -16,7 +16,7 @@ from ossfs import OSSFileSystem
 
 @pytest.mark.parametrize("default_cache_type", ["none", "bytes", "readahead"])
 def test_default_cache_type(init_config, default_cache_type, test_path):
-    data = b"a" * (10 * 2 ** 20)
+    data = b"a" * (10 * 2**20)
     file = test_path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
     ossfs = OSSFileSystem(**init_config)
@@ -32,7 +32,7 @@ def test_default_cache_type(init_config, default_cache_type, test_path):
 
 @pytest.mark.parametrize("cache_type", ["none", "bytes", "readahead"])
 def test_cache_type(ossfs, cache_type, test_path):
-    data = b"a" * (10 * 2 ** 20)
+    data = b"a" * (10 * 2**20)
     file = test_path + "/test_cache_type/file"
 
     with ossfs.open(file, "wb") as f:

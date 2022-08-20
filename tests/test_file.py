@@ -13,7 +13,7 @@ from conftest import LICENSE_PATH, NUMBERS
 
 def test_simple(ossfs, test_path):
     file = test_path + "/test_simple/file"
-    data = os.urandom(10 * 2 ** 20)
+    data = os.urandom(10 * 2**20)
 
     with ossfs.open(file, "wb") as f:
         f.write(data)
@@ -84,7 +84,7 @@ def test_read_ossfs_block(ossfs, license_file, number_file):
     )
 
 
-@pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
+@pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
 def test_write(ossfs, test_path, size):
     file = test_path + "/test_write/file"
     data = os.urandom(size)
@@ -112,17 +112,17 @@ def test_write_fails(ossfs, test_path):
 def test_write_blocks(ossfs, test_path):
     file = test_path + "/test_write_blocks/temp"
     with ossfs.open(file, "wb") as f:
-        f.write(os.urandom(2 * 2 ** 20))
-        assert f.buffer.tell() == 2 * 2 ** 20
+        f.write(os.urandom(2 * 2**20))
+        assert f.buffer.tell() == 2 * 2**20
         f.flush()
-        assert f.buffer.tell() == 2 * 2 ** 20
-        f.write(os.urandom(2 * 2 ** 20))
-        f.write(os.urandom(2 * 2 ** 20))
-    assert ossfs.info(file)["Size"] == 6 * 2 ** 20
-    with ossfs.open(file, "wb", block_size=10 * 2 ** 20) as f:
-        f.write(os.urandom(15 * 2 ** 20))
+        assert f.buffer.tell() == 2 * 2**20
+        f.write(os.urandom(2 * 2**20))
+        f.write(os.urandom(2 * 2**20))
+    assert ossfs.info(file)["Size"] == 6 * 2**20
+    with ossfs.open(file, "wb", block_size=10 * 2**20) as f:
+        f.write(os.urandom(15 * 2**20))
         assert f.buffer.tell() == 0
-    assert ossfs.info(file)["Size"] == 15 * 2 ** 20
+    assert ossfs.info(file)["Size"] == 15 * 2**20
 
 
 def test_readline(ossfs, number_file, license_file):
@@ -151,7 +151,7 @@ def test_readline_empty(ossfs, test_path):
 
 def test_readline_blocksize(ossfs, test_path):
     test_file_a = test_path + "/test_readline_blocksize/a"
-    data = b"ab\n" + b"a" * (10 * 2 ** 20) + b"\nab"
+    data = b"ab\n" + b"a" * (10 * 2**20) + b"\nab"
     with ossfs.open(test_file_a, "wb") as f:
         f.write(data)
     with ossfs.open(test_file_a, "rb") as f:
@@ -160,7 +160,7 @@ def test_readline_blocksize(ossfs, test_path):
         assert result == expected
 
         result = f.readline()
-        expected = b"a" * (10 * 2 ** 20) + b"\n"
+        expected = b"a" * (10 * 2**20) + b"\n"
         assert result == expected
 
         result = f.readline()
@@ -210,8 +210,8 @@ def test_file_status(ossfs, test_path):
         assert not f.writable()
 
 
-@pytest.mark.parametrize("data_size", [0, 20, 10 * 2 ** 20])
-@pytest.mark.parametrize("append_size", [0, 20, 10 * 2 ** 20])
+@pytest.mark.parametrize("data_size", [0, 20, 10 * 2**20])
+@pytest.mark.parametrize("append_size", [0, 20, 10 * 2**20])
 def test_append(ossfs, test_path, data_size, append_size):
     file = test_path + f"/test_append/file_{data_size}_{append_size}"
     data = os.urandom(data_size)

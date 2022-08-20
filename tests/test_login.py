@@ -47,7 +47,10 @@ def test_sts_login(endpoint, test_bucket_name):
         STSAccessKeyId, STSAccessKeySecret, STSArn
     )
     ossfs = OSSFileSystem(
-        key=key, secret=secret, token=token, endpoint=endpoint,
+        key=key,
+        secret=secret,
+        token=token,
+        endpoint=endpoint,
     )
     ossfs.ls(test_bucket_name)
 
