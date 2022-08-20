@@ -394,7 +394,9 @@ class OSSFileSystem(
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
 
-    def find(self, path, maxdepth=None, withdirs=False, **kwargs):
+    def find(
+        self, path, maxdepth=None, withdirs=False, detail=False, **kwargs
+    ):
         """List all files below path.
 
         Like posix ``find`` command without conditions
@@ -411,7 +413,6 @@ class OSSFileSystem(
         """
         path = self._strip_protocol(path)
         out = {}
-        detail = kwargs.pop("detail", False)
         prefix = kwargs.pop("prefix", None)
         if (withdirs or maxdepth) and prefix:
             raise ValueError(
