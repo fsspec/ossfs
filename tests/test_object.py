@@ -227,7 +227,7 @@ def test_move(ossfs, number_file, test_path):
     assert not ossfs.exists(from_file)
 
 
-@pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
+@pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
 def test_get_put(ossfs, tmpdir, test_path, size):
     local_file = str(tmpdir.join("number"))
     data = os.urandom(size)
@@ -243,7 +243,7 @@ def test_get_put(ossfs, tmpdir, test_path, size):
     assert open(get_file, "rb").read() == data
 
 
-@pytest.mark.parametrize("size", [2 ** 10, 2 ** 20, 10 * 2 ** 20])
+@pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
 def test_pipe_cat_big(ossfs, size, test_path):
     bigfile = test_path + "/test_get_put_big/bigfile"
     data = b"1234567890A" * size
@@ -441,8 +441,8 @@ def test_find_with_prefix(ossfs, test_path):
     ]
 
 
-WRITE_BLOCK_SIZE = 2 ** 13  # 8KB blocks
-READ_BLOCK_SIZE = 2 ** 14  # 16KB blocks
+WRITE_BLOCK_SIZE = 2**13  # 8KB blocks
+READ_BLOCK_SIZE = 2**14  # 16KB blocks
 
 
 def test_get_put_file(ossfs, tmpdir, test_path):
@@ -450,7 +450,7 @@ def test_get_put_file(ossfs, tmpdir, test_path):
     src2_file = str(tmpdir / "source_2")
     dest_file = test_path + "/get_put_file/dest"
 
-    data = b"test" * 2 ** 20
+    data = b"test" * 2**20
 
     # pylint: disable=missing-class-docstring
     class EventLogger(fsspec.Callback):
