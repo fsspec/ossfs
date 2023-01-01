@@ -45,7 +45,6 @@ class OSSFileSystem(
     A pythonic file-systems interface to OSS (Object Storage Service)
     """
 
-    tempdir = "/tmp"
     protocol = "oss"
     SIMPLE_TRANSFER_THRESHOLD = oss2.defaults.multiget_threshold
 
@@ -68,7 +67,7 @@ class OSSFileSystem(
         token : string (None)
             If not anonymous, use this security token, if specified
         endpoint : string (None)
-            Defualt endpoints of the fs
+            Default endpoints of the fs
             Endpoints are the adderss where OSS locate
             like: http://oss-cn-hangzhou.aliyuncs.com or
                         https://oss-me-east-1.aliyuncs.com
@@ -80,10 +79,10 @@ class OSSFileSystem(
             self._auth = oss2.Auth(key, secret)
         else:
             self._auth = oss2.AnonymousAuth()
-        self._endpoint = endpoint or os.getenv("OSS_ENDPOINT", None)
+        self._endpoint = endpoint or os.getenv("OSS_ENDPOINT")
         if self._endpoint is None:
             logger.warning(
-                "OSS endpoint is not setted, OSSFS could not work properly"
+                "OSS endpoint is not set, OSSFS could not work properly"
                 "without a endpoint, please set it manually with "
                 "`ossfs.set_endpoint` later"
             )
@@ -94,7 +93,7 @@ class OSSFileSystem(
         """
         Reset the endpoint for ossfs
         endpoint : string (None)
-            Defualt endpoints of the fs
+            Default endpoints of the fs
             Endpoints are the adderss where OSS locate
             like: http://oss-cn-hangzhou.aliyuncs.com or
         """
@@ -247,15 +246,15 @@ class OSSFileSystem(
         """
         if isinstance(path, list):
             return [cls._strip_protocol(p) for p in path]
-        path = stringify_path(path)
-        if path.startswith("oss://"):
-            path = path[5:]
+        path_string: str = stringify_path(path)
+        if path_string.startswith("oss://"):
+            path_string = path_string[5:]
 
         parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
-        matcher = re.compile(parser_re).match(path)
+        matcher = re.compile(parser_re).match(path_string)
         if matcher:
-            path = matcher["path"]
-        return path or cls.root_marker
+            path_string = matcher["path"]
+        return path_string or cls.root_marker
 
     def _ls_bucket(self, connect_timeout) -> List[Dict]:
         result = []
@@ -314,7 +313,7 @@ class OSSFileSystem(
         bucket_name: str,
         prefix: str,
         delimiter: str,
-        connect_timeout: int,
+        connect_timeout: Optional[int],
     ):
         """
         Wrap oss2.ObjectIterator return values into a

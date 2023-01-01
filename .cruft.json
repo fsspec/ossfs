@@ -1,0 +1,23 @@
+{
+  "template": "https://github.com/iterative/py-template",
+  "commit": "75abeda8b405100ca48820bb33191a85de9f446f",
+  "checkout": null,
+  "context": {
+    "cookiecutter": {
+      "project_name": "ossfs",
+      "package_name": "ossfs",
+      "friendly_name": "Ossfs",
+      "author": "Yanxiang",
+      "email": "mishanyo1001@gmail.com",
+      "github_user": "karajan1001",
+      "version": "2023.1.0",
+      "copyright_year": "2023",
+      "license": "Apache-2.0",
+      "docs": "True",
+      "short_description": "Fsspec filesystem for Alibaba Cloud (Aliyun) Object Storage System (OSS)",
+      "development_status": "Development Status :: 1 - Planning",
+      "_template": "https://github.com/iterative/py-template"
+    }
+  },
+  "directory": null
+}

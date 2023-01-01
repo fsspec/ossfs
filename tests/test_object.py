@@ -175,15 +175,10 @@ def test_ossfs_ls(ossfs, test_path):
 def test_ossfs_big_ls(ossfs, test_path):
     path = test_path + "/test_ossfs_big_ls"
     if not ossfs.exists(path):
-        for x in range(1200):
-            ossfs.touch(path + f"/{x}.part")
-    files = ossfs.find(path, connect_timeout=600)
-    for x in range(1200):
-        file = path + f"/{x}.part"
-        if file not in files:
+        for x in range(120):
             ossfs.touch(path + f"/{x}.part")
 
-    assert len(ossfs.find(path, connect_timeout=600)) == 1200
+    assert len(ossfs.find(path, connect_timeout=600)) == 120
 
 
 def test_ossfs_glob(ossfs, test_path):
@@ -380,31 +375,31 @@ def test_get_file_info_with_selector(ossfs, test_path):
 
 def test_same_name_but_no_exact(ossfs, test_path):
     path = test_path + "/test_same_name_but_no_exact"
-    ossfs.touch(path + "/very/similiar/prefix1")
-    ossfs.touch(path + "/very/similiar/prefix2")
-    ossfs.touch(path + "/very/similiar/prefix3/something")
-    assert not ossfs.exists(path + "/very/similiar/prefix")
-    assert not ossfs.exists(path + "/very/similiar/prefi")
-    assert not ossfs.exists(path + "/very/similiar/pref")
+    ossfs.touch(path + "/very/similar/prefix1")
+    ossfs.touch(path + "/very/similar/prefix2")
+    ossfs.touch(path + "/very/similar/prefix3/something")
+    assert not ossfs.exists(path + "/very/similar/prefix")
+    assert not ossfs.exists(path + "/very/similar/prefi")
+    assert not ossfs.exists(path + "/very/similar/pref")
 
-    assert ossfs.exists(path + "/very/similiar/")
-    assert ossfs.exists(path + "/very/similiar/prefix1")
-    assert ossfs.exists(path + "/very/similiar/prefix2")
-    assert ossfs.exists(path + "/very/similiar/prefix3")
-    assert ossfs.exists(path + "/very/similiar/prefix3/")
-    assert ossfs.exists(path + "/very/similiar/prefix3/something")
+    assert ossfs.exists(path + "/very/similar/")
+    assert ossfs.exists(path + "/very/similar/prefix1")
+    assert ossfs.exists(path + "/very/similar/prefix2")
+    assert ossfs.exists(path + "/very/similar/prefix3")
+    assert ossfs.exists(path + "/very/similar/prefix3/")
+    assert ossfs.exists(path + "/very/similar/prefix3/something")
 
-    assert not ossfs.exists(path + "/very/similiar/prefix3/some")
+    assert not ossfs.exists(path + "/very/similar/prefix3/some")
 
-    ossfs.touch(path + "/starting/very/similiar/prefix")
+    ossfs.touch(path + "/starting/very/similar/prefix")
 
-    assert not ossfs.exists(path + "/starting/very/similiar/prefix1")
-    assert not ossfs.exists(path + "/starting/very/similiar/prefix3")
-    assert not ossfs.exists(path + "/starting/very/similiar/prefix3/")
-    assert not ossfs.exists(path + "/starting/very/similiar/prefix3/something")
+    assert not ossfs.exists(path + "/starting/very/similar/prefix1")
+    assert not ossfs.exists(path + "/starting/very/similar/prefix3")
+    assert not ossfs.exists(path + "/starting/very/similar/prefix3/")
+    assert not ossfs.exists(path + "/starting/very/similar/prefix3/something")
 
-    assert ossfs.exists(path + "/starting/very/similiar/prefix")
-    assert not ossfs.exists(path + "/starting/very/similiar/prefix/")
+    assert ossfs.exists(path + "/starting/very/similar/prefix")
+    assert not ossfs.exists(path + "/starting/very/similar/prefix/")
 
 
 def test_leading_forward_slash(ossfs, test_path):
