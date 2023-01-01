@@ -8,7 +8,8 @@ import io
 import os
 
 import pytest
-from conftest import LICENSE_PATH, NUMBERS
+
+from .conftest import LICENSE_PATH, NUMBERS
 
 
 def test_simple(ossfs, test_path):

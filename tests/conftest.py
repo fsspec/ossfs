@@ -6,7 +6,6 @@ Pytest setup
 import os
 import pathlib
 import subprocess
-import time
 import uuid
 
 import oss2
@@ -59,17 +58,12 @@ def oss_emulator_server_start(emulator_endpoint):
     """
     with subprocess.Popen(f"ruby bin/emulator -r store -p {PORT}"):
 
-        timeout = 5
-        while timeout > 0:
-            try:
-                result = requests.get(emulator_endpoint)
-                if result.ok:
-                    break
-            except Exception as err:
-                raise Exception("emulator start timeout") from err
-            timeout -= 0.1
-            time.sleep(0.1)
-        yield
+        try:
+            result = requests.get(emulator_endpoint, timeout=5)
+            if result.ok:
+                yield
+        except TimeoutError as err:
+            raise Exception("emulator start timeout") from err
 
 
 @pytest.fixture(scope="session")
