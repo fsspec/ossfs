@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools_scm]
 
 [tool.black]
-line-length = 79
+line-length = 88
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -25,7 +25,7 @@ exclude = '''
 [tool.isort]
 profile = "black"
 known_first_party = ["ossfs"]
-line_length = 79
+line_length = 88
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -66,6 +66,9 @@ files = ["src", "tests"]
 [[tool.mypy.overrides]]
 module = ["oss2.*", "fsspec.*", "aliyunsdkcore", "aliyunsdksts.*", "requests"]
 ignore_missing_imports = true
+
+[tool.pylint.format]
+max-line-length = 88
 
 [tool.pylint.message_control]
 enable = ["c-extension-no-member", "no-else-return"]
