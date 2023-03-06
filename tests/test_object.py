@@ -307,7 +307,7 @@ def test_get_directories(ossfs, tmpdir, test_path):
     ossfs.touch(path + "/dir/dirkey/key1")
     ossfs.touch(path + "/dir/dir/key")
     d = str(tmpdir)
-    ossfs.get(path + "/dir", d, recursive=True)
+    ossfs.get(path + "/dir/", d, recursive=True)
     assert {"dirkey", "dir"} == set(os.listdir(d))
     assert ["key"] == os.listdir(os.path.join(d, "dir"))
     assert {"key0", "key1"} == set(os.listdir(os.path.join(d, "dirkey")))
