@@ -68,7 +68,6 @@ def test_connect_many(init_config, test_bucket_name):
 
 
 def test_pickle(ossfs, test_path):
-
     path = test_path + "/test_pickle/"
     for number in range(10):
         ossfs.touch(path + "file" + str(number))

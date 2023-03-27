@@ -127,9 +127,7 @@ def test_bulk_delete(ossfs, test_path):
     ossfs.touch(nest_file2)
     filelist = ossfs.find(test_path + "/test_bulk_delete")
     ossfs.rm(filelist)
-    assert not ossfs.exists(
-        test_path + "/test_bulk_delete/nested/nested2/file1"
-    )
+    assert not ossfs.exists(test_path + "/test_bulk_delete/nested/nested2/file1")
 
 
 def test_ossfs_file_access(ossfs, number_file):
@@ -346,7 +344,6 @@ def test_modified(ossfs, test_path):
 
 
 def test_get_file_info_with_selector(ossfs, test_path):
-
     base_dir = test_path + "/test_get_file_info_with_selector"
     file_a = base_dir + "/test_file_a"
     file_b = base_dir + "/test_file_b"
