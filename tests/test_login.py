@@ -43,9 +43,7 @@ def test_access_key_login(ossfs, test_bucket_name):
 
 
 def test_sts_login(endpoint, test_bucket_name):
-    key, secret, token = fetch_sts_token(
-        STSAccessKeyId, STSAccessKeySecret, STSArn
-    )
+    key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     ossfs = OSSFileSystem(
         key=key,
         secret=secret,
@@ -56,9 +54,7 @@ def test_sts_login(endpoint, test_bucket_name):
 
 
 def test_set_endpoint(endpoint, test_bucket_name, monkeypatch):
-    key, secret, token = fetch_sts_token(
-        STSAccessKeyId, STSAccessKeySecret, STSArn
-    )
+    key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.delenv("OSS_ENDPOINT")
     ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
     with pytest.raises(ValueError):
@@ -68,9 +64,7 @@ def test_set_endpoint(endpoint, test_bucket_name, monkeypatch):
 
 
 def test_env_endpoint(endpoint, test_bucket_name, monkeypatch):
-    key, secret, token = fetch_sts_token(
-        STSAccessKeyId, STSAccessKeySecret, STSArn
-    )
+    key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.setenv("OSS_ENDPOINT", endpoint)
     ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
     ossfs.ls(test_bucket_name)

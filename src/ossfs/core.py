@@ -37,9 +37,7 @@ def _as_progress_handler(callback):
     return progress_handler
 
 
-class OSSFileSystem(
-    AbstractFileSystem
-):  # pylint:disable=too-many-public-methods
+class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-methods
     # pylint:disable=no-value-for-parameter
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
@@ -143,20 +141,14 @@ class OSSFileSystem(
                 method = getattr(service, method_name, None)
                 if not method:
                     method = getattr(oss2, method_name)
-                    logger.debug(
-                        "CALL: %s - %s - %s", method.__name__, args, kwargs
-                    )
+                    logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
                     out = method(service, *args, **kwargs)
                 else:
-                    logger.debug(
-                        "CALL: %s - %s - %s", method.__name__, args, kwargs
-                    )
+                    logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
                     out = method(*args, **kwargs)
                 return out
             except oss2.exceptions.RequestError as err:
-                logger.debug(
-                    "Retryable error: %s, try %s times", err, count + 1
-                )
+                logger.debug("Retryable error: %s, try %s times", err, count + 1)
                 error = err
             except oss2.exceptions.OssError as err:
                 logger.debug("Nonretryable error: %s", err)
@@ -258,9 +250,7 @@ class OSSFileSystem(
 
     def _ls_bucket(self, connect_timeout) -> List[Dict]:
         result = []
-        for bucket in self._call_oss(
-            "BucketIterator", timeout=connect_timeout
-        ):
+        for bucket in self._call_oss("BucketIterator", timeout=connect_timeout):
             result.append(
                 {
                     "name": bucket.name,
@@ -395,9 +385,7 @@ class OSSFileSystem(
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
 
-    def find(
-        self, path, maxdepth=None, withdirs=False, detail=False, **kwargs
-    ):
+    def find(self, path, maxdepth=None, withdirs=False, detail=False, **kwargs):
         """List all files below path.
 
         Like posix ``find`` command without conditions
@@ -430,14 +418,10 @@ class OSSFileSystem(
             ):
                 out.update({info["name"]: info})
         else:
-            for _, dirs, files in self.walk(
-                path, maxdepth, detail=True, **kwargs
-            ):
+            for _, dirs, files in self.walk(path, maxdepth, detail=True, **kwargs):
                 if withdirs:
                     files.update(dirs)
-                out.update(
-                    {info["name"]: info for name, info in files.items()}
-                )
+                out.update({info["name"]: info for name, info in files.items()})
             if self.isfile(path) and path not in out:
                 # walk works on directories, but find should also return [path]
                 # when path happens to be a file
@@ -565,9 +549,7 @@ class OSSFileSystem(
             return
 
         bucket_name, _ = self.split_path(path)
-        path_expand = self.expand_path(
-            path, recursive=recursive, maxdepth=maxdepth
-        )
+        path_expand = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
         path_expand = [self.split_path(file)[1] for file in path_expand]
 
         def chunks(lst: list, num: int):
@@ -653,9 +635,7 @@ class OSSFileSystem(
         bucket_name, obj_name = self.split_path(path)
         if not obj_name or self.isdir(path):
             raise NotImplementedError("bucket has no modified timestamp")
-        simplifiedmeta = self._call_oss(
-            "get_object_meta", obj_name, bucket=bucket_name
-        )
+        simplifiedmeta = self._call_oss("get_object_meta", obj_name, bucket=bucket_name)
         return int(
             datetime.strptime(
                 simplifiedmeta.headers["Last-Modified"],
@@ -696,9 +676,7 @@ class OSSFileSystem(
         return object_stream.read()
 
     def sign(self, path, expiration=100, **kwargs):
-        raise NotImplementedError(
-            "Sign is not implemented for this filesystem"
-        )
+        raise NotImplementedError("Sign is not implemented for this filesystem")
 
     def touch(self, path, truncate=True, **kwargs):
         """Create empty file, or update timestamp
@@ -719,9 +697,7 @@ class OSSFileSystem(
     def pipe_file(self, path, value, **kwargs):
         """Set the bytes of given file"""
         bucket_name, obj_name = self.split_path(path)
-        self._call_oss(
-            "put_object", obj_name, value, bucket=bucket_name, **kwargs
-        )
+        self._call_oss("put_object", obj_name, value, bucket=bucket_name, **kwargs)
         bucket = self._get_bucket(bucket_name)
         bucket.put_object(obj_name, value, **kwargs)
         self.invalidate_cache(self._parent(path))
@@ -749,9 +725,7 @@ class OSSFile(AbstractBufferedFile):
             This is the last block, so should complete file, if
             self.autocommit is True.
         """
-        self.loc = self.fs.append_object(
-            self.path, self.loc, self.buffer.getvalue()
-        )
+        self.loc = self.fs.append_object(self.path, self.loc, self.buffer.getvalue())
         return True
 
     def _initiate_upload(self):
