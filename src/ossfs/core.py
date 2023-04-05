@@ -12,6 +12,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import oss2
 from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
 from fsspec.utils import stringify_path
+from oss2.auth import AnonymousAuth, AuthBase, StsAuth
 
 from ossfs.exceptions import translate_boto_error
 
@@ -52,6 +53,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         key: Optional[str] = None,
         secret: Optional[str] = None,
         token: Optional[str] = None,
+        auth: Optional[Union[AuthBase, AnonymousAuth, StsAuth]] = None,
         default_cache_type: Optional[str] = "readahead",
         **kwargs,  # pylint: disable=too-many-arguments
     ):
@@ -71,6 +73,12 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                         https://oss-me-east-1.aliyuncs.com
         """
         super().__init__(**kwargs)
+        if auth:
+            if any([key, secret, token]):
+                logger.warning(
+                    "Auth provided 'key', 'secret', and 'token' will be ignored"
+                )
+            self._auth = auth
         if token:
             self._auth = oss2.StsAuth(key, secret, token)
         elif key:

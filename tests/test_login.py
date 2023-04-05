@@ -11,6 +11,7 @@ import oss2
 import pytest
 from aliyunsdkcore import client
 from aliyunsdksts.request.v20150401 import AssumeRoleRequest
+from oss2.credentials import EcsRamRoleCredentialsProvider
 
 from ossfs import OSSFileSystem
 
@@ -25,7 +26,7 @@ def fetch_sts_token(access_key_id, access_key_secret, role_arn):
 
     req.set_accept_format("json")
     req.set_RoleArn(role_arn)
-    req.set_RoleSessionName("oss-python-sdk-example")
+    req.set_RoleSessionName("ossfs-login-test")
 
     body = clt.do_action_with_exception(req)
 
@@ -73,3 +74,29 @@ def test_env_endpoint(endpoint, test_bucket_name, monkeypatch):
 def test_anonymous_login(file_in_anonymous, endpoint):
     ossfs = OSSFileSystem(endpoint=endpoint)
     ossfs.cat(f"{file_in_anonymous}")
+
+
+def test_auth_login(endpoint, test_bucket_name):
+    key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
+    auth = oss2.StsAuth(key, secret, token)
+    ossfs = OSSFileSystem(
+        auth=auth,
+        endpoint=endpoint,
+    )
+    ossfs.ls(test_bucket_name)
+
+
+def test_ecs_ram_role_credential(endpoint, test_bucket_name, test_directory):
+    key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
+    auth = oss2.StsAuth(key, secret, token)
+    bucket = oss2.Bucket(auth, endpoint, test_bucket_name)
+    path = f"{test_directory}/test_ecs_ram_role_credential/file"
+    bucket.put_object(path, "test ecs ram role credential")
+    auth_server_host = bucket.sign_url("GET", path, 10)
+    credentials_provider = EcsRamRoleCredentialsProvider(auth_server_host, 3, 10)
+    provider_auth = oss2.ProviderAuth(credentials_provider)
+    ossfs = OSSFileSystem(
+        auth=provider_auth,
+        endpoint=endpoint,
+    )
+    ossfs.ls(test_bucket_name)
