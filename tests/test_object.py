@@ -21,7 +21,9 @@ def test_info(ossfs, test_path):
     ossfs.touch(test_info_b)
     info = ossfs.info(test_info_a)
     linfo = ossfs.ls(test_info_a, detail=True)[0]
-    assert abs(info.pop("LastModified") - linfo.pop("LastModified")) <= 1
+    offset = time.timezone if (time.localtime().tm_isdst == 0) else time.altzone
+
+    assert abs(info.pop("LastModified") - linfo.pop("LastModified") + offset) <= 1
     assert info == linfo
 
     # test not exist dir
