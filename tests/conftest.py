@@ -90,8 +90,8 @@ def put_file(endpoint, bucket_name, key, filename):
 
 
 @pytest.fixture(scope="session")
-def file_in_anonymous(endpoint, test_directory):
-    bucket = "dvc-anonymous"
+def file_in_anonymous(endpoint, test_directory, test_bucket_name):
+    bucket = f"{test_bucket_name}-anonymous"
     file = f"{test_directory}/file"
     put_object(endpoint, bucket, file, "foobar")
     return f"/{bucket}/{file}"
