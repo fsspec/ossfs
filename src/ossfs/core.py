@@ -48,7 +48,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
 
     def __init__(
         self,
-        endpoint: str,
+        endpoint: Optional[str] = None,
         key: Optional[str] = None,
         secret: Optional[str] = None,
         token: Optional[str] = None,

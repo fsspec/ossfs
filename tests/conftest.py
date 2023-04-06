@@ -7,10 +7,12 @@ import os
 import pathlib
 import subprocess
 import uuid
+from typing import Dict
 
 import oss2
 import pytest
 import requests
+from oss2 import Auth
 
 from ossfs import OSSFileSystem
 
@@ -22,6 +24,10 @@ NUMBERS = b"1234567890\n"
 
 
 test_id = uuid.uuid4()
+
+
+def bucket_relative_path(path: str) -> str:
+    return path.split("/", 2)[2]
 
 
 @pytest.fixture(scope="session")
@@ -68,39 +74,40 @@ def init_config(endpoint):
 
 
 @pytest.fixture()
-def ossfs(init_config):
+def ossfs(init_config: Dict):
     return OSSFileSystem(**init_config)
 
 
-def put_object(endpoint, bucket_name, filename, contents):
-    auth = oss2.Auth(AccessKeyId, AccessKeySecret)
-    bucket = oss2.Bucket(auth, endpoint, bucket_name)
-    bucket.put_object(filename, contents)
-
-
-def put_file(endpoint, bucket_name, key, filename):
-    auth = oss2.Auth(AccessKeyId, AccessKeySecret)
-    bucket = oss2.Bucket(auth, endpoint, bucket_name)
-    bucket.put_object_from_file(key, filename)
+@pytest.fixture(scope="session")
+def auth():
+    return Auth(AccessKeyId, AccessKeySecret)
 
 
 @pytest.fixture(scope="session")
-def file_in_anonymous(endpoint, test_directory, test_bucket_name):
-    bucket = f"{test_bucket_name}-anonymous"
+def bucket(auth: "Auth", endpoint: str, test_bucket_name: str):
+    return oss2.Bucket(auth, endpoint, test_bucket_name)
+
+
+@pytest.fixture(scope="session")
+def file_in_anonymous(
+    auth: "Auth", endpoint: str, test_directory: str, test_bucket_name: str
+):
+    bucket_name = f"{test_bucket_name}-anonymous"
+    bucket = oss2.Bucket(auth, endpoint, bucket_name)
     file = f"{test_directory}/file"
-    put_object(endpoint, bucket, file, "foobar")
-    return f"/{bucket}/{file}"
+    bucket.put_object(file, "foobar")
+    return f"/{bucket_name}/{file}"
 
 
 @pytest.fixture(scope="session")
-def number_file(test_bucket_name, endpoint, test_directory):
+def number_file(bucket: "oss2.Bucket", test_directory: str, test_bucket_name: str):
     filename = f"{test_directory}/number"
-    put_object(endpoint, test_bucket_name, filename, NUMBERS)
+    bucket.put_object(filename, NUMBERS)
     return f"/{test_bucket_name}/{filename}"
 
 
 @pytest.fixture(scope="session")
-def license_file(test_bucket_name, endpoint, test_directory):
+def license_file(bucket: "oss2.Bucket", test_bucket_name: str, test_directory: str):
     filename = f"{test_directory}/LICENSE"
-    put_file(endpoint, test_bucket_name, filename, LICENSE_PATH)
+    bucket.put_object_from_file(filename, LICENSE_PATH)
     return f"/{test_bucket_name}/{filename}"
