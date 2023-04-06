@@ -19,13 +19,7 @@ STSAccessKeySecret = os.getenv("OSS_TEST_STS_KEY", "")
 STSArn = os.getenv("OSS_TEST_STS_ARN", "")
 
 
-@pytest.fixture(scope="module", name="test_path")
-def file_level_path(test_directory):
-    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"{test_directory}/{file_name}"
-
-
-def fetch_sts_token(access_key_id, access_key_secret, role_arn):
+def fetch_sts_token(access_key_id: str, access_key_secret: str, role_arn: str):
     clt = client.AcsClient(access_key_id, access_key_secret, "cn-hangzhou")
     req = AssumeRoleRequest.AssumeRoleRequest()
 
@@ -44,11 +38,11 @@ def fetch_sts_token(access_key_id, access_key_secret, role_arn):
     return access_key_id, access_key_secret, security_token
 
 
-def test_access_key_login(ossfs, test_bucket_name):
+def test_access_key_login(ossfs: "OSSFileSystem", test_bucket_name: str):
     ossfs.ls(test_bucket_name)
 
 
-def test_sts_login(endpoint, test_bucket_name):
+def test_sts_login(endpoint: str, test_bucket_name: str):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     ossfs = OSSFileSystem(
         key=key,
@@ -59,7 +53,7 @@ def test_sts_login(endpoint, test_bucket_name):
     ossfs.ls(test_bucket_name)
 
 
-def test_set_endpoint(endpoint, test_bucket_name, monkeypatch):
+def test_set_endpoint(endpoint: str, test_bucket_name: str, monkeypatch):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.delenv("OSS_ENDPOINT")
     ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
@@ -69,13 +63,13 @@ def test_set_endpoint(endpoint, test_bucket_name, monkeypatch):
     ossfs.ls(test_bucket_name)
 
 
-def test_env_endpoint(endpoint, test_bucket_name, monkeypatch):
+def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.setenv("OSS_ENDPOINT", endpoint)
     ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
     ossfs.ls(test_bucket_name)
 
 
-def test_anonymous_login(file_in_anonymous, endpoint):
+def test_anonymous_login(file_in_anonymous: str, endpoint: str):
     ossfs = OSSFileSystem(endpoint=endpoint)
     ossfs.cat(f"{file_in_anonymous}")

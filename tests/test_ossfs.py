@@ -1,6 +1,8 @@
 """
 Test class level functionality.
 """
+import inspect
+
 # pylint:disable=protected-access
 # pylint:disable=missing-function-docstring
 # pylint:disable=invalid-name
@@ -8,6 +10,7 @@ import os
 import pickle
 import time
 from multiprocessing.pool import ThreadPool
+from typing import Dict
 
 import fsspec.core
 import pytest
@@ -22,9 +25,11 @@ def file_level_path(test_bucket_name: str, test_directory: str):
 
 
 @pytest.mark.parametrize("default_cache_type", ["none", "bytes", "readahead"])
-def test_default_cache_type(init_config, default_cache_type, test_path):
+def test_default_cache_type(init_config: Dict, default_cache_type: str, test_path: str):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    path = f"{test_path}/{function_name}/"
     data = b"a" * (10 * 2**20)
-    file = test_path + "/test_default_cache_type/file"
+    file = path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
     ossfs = OSSFileSystem(**init_config)
     with ossfs.open(file, "wb") as f:
@@ -38,9 +43,11 @@ def test_default_cache_type(init_config, default_cache_type, test_path):
 
 
 @pytest.mark.parametrize("cache_type", ["none", "bytes", "readahead"])
-def test_cache_type(ossfs, cache_type, test_path):
+def test_cache_type(ossfs: "OSSFileSystem", cache_type: str, test_path: str):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    path = f"{test_path}/{function_name}/"
     data = b"a" * (10 * 2**20)
-    file = test_path + "/test_cache_type/file"
+    file = path + "/test_cache_type/file"
 
     with ossfs.open(file, "wb") as f:
         f.write(data)
@@ -52,14 +59,14 @@ def test_cache_type(ossfs, cache_type, test_path):
         assert out == data
 
 
-def test_current(ossfs, init_config):
+def test_current(ossfs: "OSSFileSystem", init_config: Dict):
     ossfs._cache.clear()  # pylint: disable=protected-access
     ossfs = OSSFileSystem(**init_config)
     assert ossfs.current() is ossfs
     assert OSSFileSystem.current() is ossfs
 
 
-def test_connect_many(init_config, test_bucket_name):
+def test_connect_many(init_config: Dict, test_bucket_name: str):
     def task(num):  # pylint: disable=unused-argument
         ossfs = OSSFileSystem(**init_config)
         ossfs.ls(test_bucket_name)
@@ -74,8 +81,9 @@ def test_connect_many(init_config, test_bucket_name):
     pool.join()
 
 
-def test_pickle(ossfs, test_path):
-    path = test_path + "/test_pickle/"
+def test_pickle(ossfs: "OSSFileSystem", test_path: str):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    path = f"{test_path}/{function_name}/"
     for number in range(10):
         ossfs.touch(path + "file" + str(number))
 

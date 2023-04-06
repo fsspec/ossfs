@@ -1,15 +1,23 @@
 """
 Test all OSSFile related methods
 """
+import inspect
+
 # pylint:disable=invalid-name
 # pylint:disable=missing-function-docstring
 # pylint:disable=protected-access
 import io
 import os
+from typing import TYPE_CHECKING
 
 import pytest
 
-from .conftest import LICENSE_PATH, NUMBERS
+from .conftest import LICENSE_PATH, NUMBERS, bucket_relative_path
+
+if TYPE_CHECKING:
+    from oss2 import Bucket
+
+    from ossfs import OSSFileSystem
 
 
 @pytest.fixture(scope="module", name="test_path")
@@ -18,25 +26,36 @@ def file_level_path(test_bucket_name: str, test_directory: str):
     return f"/{test_bucket_name}/{test_directory}/{file_name}"
 
 
-def test_simple(ossfs, test_path):
-    file = test_path + "/test_simple/file"
+def test_simple_read(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
     data = os.urandom(10 * 2**20)
+    bucket.put_object(bucket_relative_path(object_name), data)
 
-    with ossfs.open(file, "wb") as f:
-        f.write(data)
-
-    with ossfs.open(file, "rb") as f:
+    with ossfs.open(object_name, "rb") as f:
         out = f.read(len(data))
         assert len(data) == len(out)
         assert out == data
 
 
-def test_seek(ossfs, test_path):
-    file = test_path + "/test_seek/file"
-    with ossfs.open(file, "wb") as f:
-        f.write(b"123")
+def test_simple_write(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
+    data = os.urandom(10 * 2**20)
 
-    with ossfs.open(file) as f:
+    with ossfs.open(object_name, "wb") as f:
+        f.write(data)
+
+    out = bucket.get_object(bucket_relative_path(object_name)).read()
+    assert out == data
+
+
+def test_seek(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
+    bucket.put_object(bucket_relative_path(object_name), b"123")
+
+    with ossfs.open(object_name) as f:
         f.seek(1000)
         with pytest.raises(ValueError):
             f.seek(-1)
@@ -59,7 +78,7 @@ def test_seek(ossfs, test_path):
             assert f.seek(i) == i
 
 
-def test_read_small(ossfs, number_file):
+def test_read_small(ossfs: "OSSFileSystem", number_file: str, bucket: "Bucket"):
     with ossfs.open(number_file, "rb", block_size=3) as f:
         out = []
         while True:
@@ -67,10 +86,12 @@ def test_read_small(ossfs, number_file):
             if data == b"":
                 break
             out.append(data)
-        assert ossfs.cat(number_file) == b"".join(out)
+        assert bucket.get_object(bucket_relative_path(number_file)).read() == b"".join(
+            out
+        )
 
 
-def test_read_ossfs_block(ossfs, license_file, number_file):
+def test_read_ossfs_block(ossfs: "OSSFileSystem", license_file: str, number_file: str):
     with open(LICENSE_PATH, "rb") as f_r:
         data = f_r.read()
     lines = io.BytesIO(data).readlines()
@@ -92,23 +113,26 @@ def test_read_ossfs_block(ossfs, license_file, number_file):
 
 
 @pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
-def test_write(ossfs, test_path, size):
-    file = test_path + "/test_write/file"
+def test_write(ossfs: "OSSFileSystem", test_path: str, size: int, bucket: "Bucket"):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
     data = os.urandom(size)
-    with ossfs.open(file, "wb") as f:
+    with ossfs.open(object_name, "wb") as f:
         f.write(data)
-    assert ossfs.cat(file) == data
-    assert ossfs.info(file)["Size"] == len(data)
-    ossfs.open(file, "wb").close()
-    assert ossfs.info(file)["Size"] == 0
+    out = bucket.get_object(bucket_relative_path(object_name)).read()
+    assert data == out
+    assert ossfs.info(object_name)["Size"] == len(data)
+    ossfs.open(object_name, "wb").close()
+    assert ossfs.info(object_name)["Size"] == 0
 
 
-def test_write_fails(ossfs, test_path):
-    file = test_path + "/test_write_fails/temp"
-    ossfs.touch(file)
+def test_write_fails(ossfs: "OSSFileSystem", test_path: str):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
+    ossfs.touch(object_name)
     with pytest.raises(ValueError):
-        ossfs.open(file, "rb").write(b"hello")
-    f = ossfs.open(file, "wb")
+        ossfs.open(object_name, "rb").write(b"hello")
+    f = ossfs.open(object_name, "wb")
     f.close()
     with pytest.raises(ValueError):
         f.write(b"hello")
@@ -116,20 +140,23 @@ def test_write_fails(ossfs, test_path):
         ossfs.open("nonexistentbucket/temp", "wb").close()
 
 
-def test_write_blocks(ossfs, test_path):
-    file = test_path + "/test_write_blocks/temp"
-    with ossfs.open(file, "wb") as f:
+def test_write_blocks(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    object_name = f"{test_path}/{function_name}"
+    with ossfs.open(object_name, "wb") as f:
         f.write(os.urandom(2 * 2**20))
         assert f.buffer.tell() == 2 * 2**20
         f.flush()
         assert f.buffer.tell() == 2 * 2**20
         f.write(os.urandom(2 * 2**20))
         f.write(os.urandom(2 * 2**20))
-    assert ossfs.info(file)["Size"] == 6 * 2**20
-    with ossfs.open(file, "wb", block_size=10 * 2**20) as f:
+    out = bucket.get_object(bucket_relative_path(object_name)).read()
+    assert len(out) == 6 * 2**20
+    with ossfs.open(object_name, "wb", block_size=10 * 2**20) as f:
         f.write(os.urandom(15 * 2**20))
         assert f.buffer.tell() == 0
-    assert ossfs.info(file)["Size"] == 15 * 2**20
+    out = bucket.get_object(bucket_relative_path(object_name)).read()
+    assert len(out) == 15 * 2**20
 
 
 def test_readline(ossfs, number_file, license_file):
@@ -239,7 +266,7 @@ def test_bigger_than_block_read(ossfs, number_file):
             out.append(data)
             if len(data) == 0:
                 break
-    assert b"".join(out) == b"1234567890\n"
+    assert b"".join(out) == NUMBERS
 
 
 def test_text_io__stream_wrapper_works(ossfs, test_path):
