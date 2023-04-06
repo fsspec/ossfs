@@ -12,6 +12,12 @@ import fsspec
 import pytest
 
 
+@pytest.fixture(scope="module", name="test_path")
+def file_level_path(test_bucket_name: str, test_directory: str):
+    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
+    return f"/{test_bucket_name}/{test_directory}/{file_name}"
+
+
 def test_info(ossfs, test_path):
     "test file info"
     # test file info

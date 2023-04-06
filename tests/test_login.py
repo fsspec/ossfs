@@ -19,6 +19,12 @@ STSAccessKeySecret = os.getenv("OSS_TEST_STS_KEY", "")
 STSArn = os.getenv("OSS_TEST_STS_ARN", "")
 
 
+@pytest.fixture(scope="module", name="test_path")
+def file_level_path(test_directory):
+    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
+    return f"{test_directory}/{file_name}"
+
+
 def fetch_sts_token(access_key_id, access_key_secret, role_arn):
     clt = client.AcsClient(access_key_id, access_key_secret, "cn-hangzhou")
     req = AssumeRoleRequest.AssumeRoleRequest()
