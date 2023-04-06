@@ -44,11 +44,6 @@ def test_directory():
     return f"ossfs_test/{test_id}"
 
 
-@pytest.fixture(scope="session")
-def test_path(test_bucket_name, test_directory):
-    return f"/{test_bucket_name}/{test_directory}"
-
-
 @pytest.fixture()
 def oss_emulator_server_start(emulator_endpoint):
     """

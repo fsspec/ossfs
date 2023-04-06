@@ -4,6 +4,7 @@ Test class level functionality.
 # pylint:disable=protected-access
 # pylint:disable=missing-function-docstring
 # pylint:disable=invalid-name
+import os
 import pickle
 import time
 from multiprocessing.pool import ThreadPool
@@ -12,6 +13,12 @@ import fsspec.core
 import pytest
 
 from ossfs import OSSFileSystem
+
+
+@pytest.fixture(scope="module", name="test_path")
+def file_level_path(test_bucket_name: str, test_directory: str):
+    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
+    return f"/{test_bucket_name}/{test_directory}/{file_name}"
 
 
 @pytest.mark.parametrize("default_cache_type", ["none", "bytes", "readahead"])
