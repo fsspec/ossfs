@@ -7,13 +7,14 @@ import os
 import re
 from datetime import datetime
 from hashlib import sha256
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import oss2
-from fsspec.spec import AbstractBufferedFile, AbstractFileSystem
+from fsspec.spec import AbstractFileSystem
 from fsspec.utils import stringify_path
 
-from ossfs.exceptions import translate_boto_error
+from .exceptions import translate_boto_error
+from .file import OSSFile
 
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
@@ -52,7 +53,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         key: Optional[str] = None,
         secret: Optional[str] = None,
         token: Optional[str] = None,
-        default_cache_type: Optional[str] = "readahead",
+        default_cache_type: str = "readahead",
         **kwargs,  # pylint: disable=too-many-arguments
     ):
         """
@@ -181,13 +182,13 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
 
     def _open(
         self,
-        path,
-        mode="rb",
-        block_size=None,
-        autocommit=True,
-        cache_options=None,
+        path: str,
+        mode: str = "rb",
+        block_size: Optional[int] = None,
+        autocommit: bool = True,
+        cache_options: Optional[str] = None,
         **kwargs,  # pylint: disable=too-many-arguments
-    ):
+    ) -> "OSSFile":
         """
         Open a file for reading or writing.
         Parameters
@@ -217,11 +218,11 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         )
 
     @classmethod
-    def _strip_protocol(cls, path: Union[str, List[str]]):
+    def _strip_protocol(cls, path):
         """Turn path from fully-qualified to file-system-specifi
         Parameters
         ----------
-        path : string
+        path : Union[str, List[str]]
             Input path, like
             `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
             `oss://mybucket/myobject`
@@ -248,7 +249,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             path_string = matcher["path"]
         return path_string or cls.root_marker
 
-    def _ls_bucket(self, connect_timeout) -> List[Dict]:
+    def _ls_bucket(self, connect_timeout: Optional[int]) -> List[Dict]:
         result = []
         for bucket in self._call_oss("BucketIterator", timeout=connect_timeout):
             result.append(
@@ -264,7 +265,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             )
         return result
 
-    def _ls_object(self, path: str, connect_timeout) -> List[Dict]:
+    def _ls_object(self, path: str, connect_timeout: Optional[int]) -> List[Dict]:
         bucket_name, obj_name = self.split_path(path)
         if not obj_name or not bucket_name:
             return []
@@ -339,7 +340,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         path: str,
         delimiter: str = "/",
         prefix: Optional[str] = None,
-        connect_timeout: int = None,
+        connect_timeout: Optional[int] = None,
     ) -> List[Dict]:
         norm_path = path.strip("/")
         bucket_name, key = self.split_path(norm_path)
@@ -366,7 +367,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                 info["Key"] = f'/{info["Key"]}'
         return infos
 
-    def ls(self, path, detail=True, **kwargs):
+    def ls(self, path: str, detail: bool = True, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", 60)
         bucket_name, _ = self.split_path(path)
         if bucket_name:
@@ -385,7 +386,14 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             return sorted(infos, key=lambda i: i["name"])
         return sorted(info["name"] for info in infos)
 
-    def find(self, path, maxdepth=None, withdirs=False, detail=False, **kwargs):
+    def find(
+        self,
+        path: str,
+        maxdepth: Optional[int] = None,
+        withdirs: bool = False,
+        detail: bool = False,
+        **kwargs,
+    ):
         """List all files below path.
 
         Like posix ``find`` command without conditions
@@ -436,7 +444,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         ls_result = self._ls_dir(dirname, connect_timeout=connect_timeout)
         return bool(ls_result)
 
-    def _bucket_exist(self, bucket_name):
+    def _bucket_exist(self, bucket_name: str):
         if not bucket_name:
             return False
         try:
@@ -445,7 +453,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             return False
         return True
 
-    def exists(self, path, **kwargs):
+    def exists(self, path: str, **kwargs):
         """Is there a file at the given path"""
         bucket_name, obj_name = self.split_path(path)
 
@@ -466,13 +474,13 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
 
         return self._directory_exists(path, **kwargs)
 
-    def ukey(self, path):
+    def ukey(self, path: str):
         """Hash of file properties, to tell if it has changed"""
         bucket_name, obj_name = self.split_path(path)
         obj_stream = self._call_oss("get_object", obj_name, bucket=bucket_name)
         return obj_stream.server_crc
 
-    def checksum(self, path):
+    def checksum(self, path: str):
         """Unique value for current version of file
 
         If the checksum is the same from one moment to another, the contents
@@ -487,7 +495,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             (str(self.ukey(path)) + str(self.info(path))).encode()
         ).hexdigest()
 
-    def cp_file(self, path1, path2, **kwargs):
+    def cp_file(self, path1: str, path2: str, **kwargs):
         """
         Copy within two locations in the filesystem
         # todo: big file optimization
@@ -561,7 +569,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
 
         self.invalidate_cache(self._parent(path))
 
-    def get_path(self, rpath, lpath, **kwargs):
+    def get_path(self, rpath: str, lpath: str, **kwargs):
         """
         Copy single remote path to local
         """
@@ -571,11 +579,12 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             self.get_file(rpath, lpath, **kwargs)
 
     def get_file(
-        self, rpath, lpath, callback=None, **kwargs
+        self, rpath: str, lpath: str, callback: Optional[Callable] = None, **kwargs
     ):  # pylint: disable=arguments-differ
         """
         Copy single remote file to local
         """
+        self._session = oss2.Session()
         kwargs.setdefault("progress_callback", _as_progress_handler(callback))
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
@@ -596,7 +605,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                 )
 
     def put_file(
-        self, lpath, rpath, callback=None, **kwargs
+        self, lpath: str, rpath: str, callback: Optional[Callable] = None, **kwargs
     ):  # pylint: disable=arguments-differ
         """
         Copy single file to remote
@@ -621,7 +630,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                 )
         self.invalidate_cache(self._parent(rpath))
 
-    def created(self, path):
+    def created(self, path: str):
         """Return the created timestamp of a file as a datetime.datetime"""
         bucket_name, obj_name = self.split_path(path)
         if obj_name:
@@ -630,7 +639,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         timestamp = bucket_info.creation_date
         return datetime.fromtimestamp(timestamp)
 
-    def modified(self, path):
+    def modified(self, path: str):
         """Return the modified timestamp of a file as a datetime.datetime"""
         bucket_name, obj_name = self.split_path(path)
         if not obj_name or self.isdir(path):
@@ -675,10 +684,10 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             raise err
         return object_stream.read()
 
-    def sign(self, path, expiration=100, **kwargs):
+    def sign(self, path: str, expiration: int = 100, **kwargs):
         raise NotImplementedError("Sign is not implemented for this filesystem")
 
-    def touch(self, path, truncate=True, **kwargs):
+    def touch(self, path: str, truncate: bool = True, **kwargs):
         """Create empty file, or update timestamp
 
         Parameters
@@ -694,7 +703,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                 pass
             self.invalidate_cache(self._parent(path))
 
-    def pipe_file(self, path, value, **kwargs):
+    def pipe_file(self, path: str, value: str, **kwargs):
         """Set the bytes of given file"""
         bucket_name, obj_name = self.split_path(path)
         self._call_oss("put_object", obj_name, value, bucket=bucket_name, **kwargs)
@@ -702,54 +711,13 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         bucket.put_object(obj_name, value, **kwargs)
         self.invalidate_cache(self._parent(path))
 
-    def invalidate_cache(self, path=None):
+    def invalidate_cache(self, path: Optional[str] = None):
         if path is None:
             self.dircache.clear()
         else:
-            path = self._strip_protocol(path)
-            path = path.lstrip("/")
-            self.dircache.pop(path, None)
-            while path:
-                self.dircache.pop(path, None)
-                path = self._parent(path)
-
-
-class OSSFile(AbstractBufferedFile):
-    """A file living in OSSFileSystem"""
-
-    def _upload_chunk(self, final=False):
-        """Write one part of a multi-block file upload
-        Parameters
-        ==========
-        final: bool
-            This is the last block, so should complete file, if
-            self.autocommit is True.
-        """
-        self.loc = self.fs.append_object(self.path, self.loc, self.buffer.getvalue())
-        return True
-
-    def _initiate_upload(self):
-        """Create remote file/upload"""
-        if "a" in self.mode:
-            self.loc = 0
-            if self.fs.exists(self.path):
-                self.loc = self.fs.info(self.path)["size"]
-        elif "w" in self.mode:
-            # create empty file to append to
-            self.loc = 0
-            if self.fs.exists(self.path):
-                self.fs.rm_file(self.path)
-
-    def _fetch_range(self, start, end):
-        """
-        Get the specified set of bytes from remote
-        Parameters
-        ==========
-        start: int
-        end: int
-        """
-        start = max(start, 0)
-        end = min(self.size, end)
-        if start >= end or start >= self.size:
-            return b""
-        return self.fs.get_object(self.path, start, end)
+            norm_path: str = self._strip_protocol(path)
+            norm_path = norm_path.lstrip("/")
+            self.dircache.pop(norm_path, None)
+            while norm_path:
+                self.dircache.pop(norm_path, None)
+                norm_path = self._parent(norm_path)
