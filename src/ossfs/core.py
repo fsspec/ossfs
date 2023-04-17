@@ -4,21 +4,17 @@ Code of OSSFileSystem and OSSFile
 import copy
 import logging
 import os
-import re
 from datetime import datetime
 from hashlib import sha256
-from typing import Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import oss2
-from fsspec.spec import AbstractFileSystem
-from fsspec.utils import stringify_path
 
+from .base import SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
 from .exceptions import translate_boto_error
 from .file import OSSFile
 
 logger = logging.getLogger("ossfs")
-logging.getLogger("oss2").setLevel(logging.CRITICAL)
-logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
 def _as_progress_handler(callback):
@@ -38,67 +34,15 @@ def _as_progress_handler(callback):
     return progress_handler
 
 
-class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-methods
+class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-methods
     # pylint:disable=no-value-for-parameter
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
     """
 
-    protocol = "oss"
-    SIMPLE_TRANSFER_THRESHOLD = oss2.defaults.multiget_threshold
-
-    def __init__(
-        self,
-        endpoint: Optional[str] = None,
-        key: Optional[str] = None,
-        secret: Optional[str] = None,
-        token: Optional[str] = None,
-        default_cache_type: str = "readahead",
-        **kwargs,  # pylint: disable=too-many-arguments
-    ):
-        """
-        Parameters
-        ----------
-        key : string (None)
-            If not anonymous, use this access key ID, if specified
-        secret : string (None)
-            If not anonymous, use this secret access key, if specified
-        token : string (None)
-            If not anonymous, use this security token, if specified
-        endpoint : string (None)
-            Default endpoints of the fs
-            Endpoints are the adderss where OSS locate
-            like: http://oss-cn-hangzhou.aliyuncs.com or
-                        https://oss-me-east-1.aliyuncs.com
-        """
+    def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        if token:
-            self._auth = oss2.StsAuth(key, secret, token)
-        elif key:
-            self._auth = oss2.Auth(key, secret)
-        else:
-            self._auth = oss2.AnonymousAuth()
-        self._endpoint = endpoint or os.getenv("OSS_ENDPOINT")
-        if self._endpoint is None:
-            logger.warning(
-                "OSS endpoint is not set, OSSFS could not work properly"
-                "without a endpoint, please set it manually with "
-                "`ossfs.set_endpoint` later"
-            )
-        self._default_cache_type = default_cache_type
         self._session = oss2.Session()
-
-    def set_endpoint(self, endpoint: str):
-        """
-        Reset the endpoint for ossfs
-        endpoint : string (None)
-            Default endpoints of the fs
-            Endpoints are the adderss where OSS locate
-            like: http://oss-cn-hangzhou.aliyuncs.com or
-        """
-        if not endpoint:
-            raise ValueError("Not a valid endpoint")
-        self._endpoint = endpoint
 
     def _get_bucket(
         self, bucket_name: str, connect_timeout: Optional[int] = None
@@ -157,29 +101,6 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
                 break
         raise translate_boto_error(error)
 
-    def split_path(self, path: str) -> Tuple[str, str]:
-        """
-        Normalise object path string into bucket and key.
-        Parameters
-        ----------
-        path : string
-            Input path, like `/mybucket/path/to/file`
-        Examples
-        --------
-        >>> split_path("/mybucket/path/to/file")
-        ['mybucket', 'path/to/file' ]
-        >>> split_path("
-        /mybucket/path/to/versioned_file?versionId=some_version_id
-        ")
-        ['mybucket', 'path/to/versioned_file', 'some_version_id']
-        """
-        path = self._strip_protocol(path)
-        path = path.lstrip("/")
-        if "/" not in path:
-            return path, ""
-        bucket_name, obj_name = path.split("/", 1)
-        return bucket_name, obj_name
-
     def _open(
         self,
         path: str,
@@ -216,38 +137,6 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             cache_type=cache_type,
             **kwargs,
         )
-
-    @classmethod
-    def _strip_protocol(cls, path):
-        """Turn path from fully-qualified to file-system-specifi
-        Parameters
-        ----------
-        path : Union[str, List[str]]
-            Input path, like
-            `http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject`
-            `oss://mybucket/myobject`
-        Examples
-        --------
-        >>> _strip_protocol(
-            "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-            )
-        ('/mybucket/myobject')
-        >>> _strip_protocol(
-            "oss://mybucket/myobject"
-            )
-        ('/mybucket/myobject')
-        """
-        if isinstance(path, list):
-            return [cls._strip_protocol(p) for p in path]
-        path_string: str = stringify_path(path)
-        if path_string.startswith("oss://"):
-            path_string = path_string[5:]
-
-        parser_re = r"https?://(?P<endpoint>oss.+aliyuncs\.com)(?P<path>/.+)"
-        matcher = re.compile(parser_re).match(path_string)
-        if matcher:
-            path_string = matcher["path"]
-        return path_string or cls.root_marker
 
     def _ls_bucket(self, connect_timeout: Optional[int]) -> List[Dict]:
         result = []
@@ -584,7 +473,6 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         """
         Copy single remote file to local
         """
-        self._session = oss2.Session()
         kwargs.setdefault("progress_callback", _as_progress_handler(callback))
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
@@ -592,7 +480,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = self._get_bucket(bucket_name, connect_timeout)
-            if self.size(rpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
+            if self.size(rpath) >= SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
             else:
                 self._call_oss(
@@ -617,7 +505,7 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
             bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = self._get_bucket(bucket_name, connect_timeout)
-            if os.path.getsize(lpath) >= self.SIMPLE_TRANSFER_THRESHOLD:
+            if os.path.getsize(lpath) >= SIMPLE_TRANSFER_THRESHOLD:
                 oss2.resumable_upload(bucket, obj_name, lpath, **kwargs)
             else:
                 self._call_oss(
@@ -710,14 +598,3 @@ class OSSFileSystem(AbstractFileSystem):  # pylint:disable=too-many-public-metho
         bucket = self._get_bucket(bucket_name)
         bucket.put_object(obj_name, value, **kwargs)
         self.invalidate_cache(self._parent(path))
-
-    def invalidate_cache(self, path: Optional[str] = None):
-        if path is None:
-            self.dircache.clear()
-        else:
-            norm_path: str = self._strip_protocol(path)
-            norm_path = norm_path.lstrip("/")
-            self.dircache.pop(norm_path, None)
-            while norm_path:
-                self.dircache.pop(norm_path, None)
-                norm_path = self._parent(norm_path)
