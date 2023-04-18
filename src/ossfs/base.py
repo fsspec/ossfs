@@ -16,7 +16,7 @@ logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
 
-DEFAULT_PARALLELIZATION_NUMBER = 20
+DEFAULT_POOL_SIZE = 20
 DEFAULT_RETRIES = 5
 DEFAULT_READ_TIMEOUT = 15
 DEFAULT_BLOCK_SIZE = 5 * 2**20

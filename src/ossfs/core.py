@@ -1,5 +1,5 @@
 """
-Code of OSSFileSystem and OSSFile
+Code of OSSFileSystem
 """
 import copy
 import logging
@@ -38,6 +38,16 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
     # pylint:disable=no-value-for-parameter
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
+
+    Examples
+    --------
+    >>> ossfs = OSSFileSystem(anon=False)
+    >>> ossfs.ls('my-bucket/')
+    ['my-file.txt']
+
+    >>> with ossfs.open('my-bucket/my-file.txt', mode='rb') as f:
+    ...     print(f.read())
+    b'Hello, world!'
     """
 
     def __init__(self, **kwargs):
