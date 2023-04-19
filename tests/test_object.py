@@ -9,7 +9,7 @@ import inspect
 # pylint:disable=consider-using-with
 import os
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 import fsspec
 import pytest
@@ -19,7 +19,7 @@ from .conftest import NUMBERS, bucket_relative_path
 if TYPE_CHECKING:
     from oss2 import Bucket
 
-    from ossfs import OSSFileSystem
+    from ossfs import AioOSSFileSystem, OSSFileSystem
 
 
 @pytest.fixture(scope="module", name="test_path")
@@ -35,9 +35,8 @@ def test_info(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     bucket.put_object(bucket_relative_path(object_name_foo), "")
     info = ossfs.info(object_name_foo)
     linfo = ossfs.ls(object_name_foo, detail=True)[0]
-    offset = time.timezone if (time.localtime().tm_isdst == 0) else time.altzone
 
-    assert abs(info.pop("LastModified") - linfo.pop("LastModified") + offset) <= 1
+    assert abs(info.pop("LastModified") - linfo.pop("LastModified")) <= 1
     assert info == linfo
 
     # test not exist dir
@@ -77,7 +76,10 @@ def test_checksum(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
         ossfs.checksum(object_name)
 
 
-def test_ls_object(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_ls_object(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     assert ossfs.ls(path + "nonexistent") == []
@@ -85,6 +87,17 @@ def test_ls_object(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     filename = path + "accounts.1.json"
     bucket.put_object(bucket_relative_path(filename), "")
     assert filename in ossfs.ls(path, detail=False)
+
+
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_ls_dir(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
+    function_name = inspect.stack()[0][0].f_code.co_name
+    path = f"{test_path}/{function_name}/"
+    file = path + "file"
+    bucket.put_object(bucket_relative_path(file), "")
+    assert file in ossfs.ls(path, detail=False)
 
 
 def test_ls_and_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
@@ -111,11 +124,14 @@ def test_isfile(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     assert not ossfs.isfile(path)
 
     assert not ossfs.isfile(file_foo)
+    ossfs.invalidate_cache()
     bucket.put_object(bucket_relative_path(file_foo), "foo")
     assert ossfs.isfile(file_foo)
 
 
-def test_isdir(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+def test_isdir(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     "test isdir in ossfs"
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -289,7 +305,7 @@ def test_pipe_cat_big(
     assert bucket.get_object(bucket_relative_path(bigfile)).read() == data
 
 
-def test_errors(ossfs: "OSSFileSystem", test_path: str):
+def test_errors(bucket: "Bucket", ossfs: "OSSFileSystem", test_path: str):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
 
@@ -306,11 +322,12 @@ def test_errors(ossfs: "OSSFileSystem", test_path: str):
         ossfs.rm("/non_exist_bucket")
 
     with pytest.raises(ValueError):
-        with ossfs.open(path + "/temp", "wb") as f:
+        with ossfs.open(path + "temp", "wb") as f:
             f.read()
 
+    bucket.put_object(path.split("/", 2)[-1] + "temp", "foobar")
     with pytest.raises(ValueError):
-        f = ossfs.open(path + "/temp", "rb")
+        f = ossfs.open(path + "temp", "rb")
         f.close()
         f.read()
 
@@ -359,14 +376,6 @@ def test_get_directories(
     assert {"dirkey", "dir"} == set(os.listdir(d))
     assert ["key"] == os.listdir(os.path.join(d, "dir"))
     assert {"key0", "key1"} == set(os.listdir(os.path.join(d, "dirkey")))
-
-
-def test_lsdir(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
-    file = path + "file"
-    bucket.put_object(bucket_relative_path(file), "")
-    assert file in ossfs.ls(path, detail=False)
 
 
 def test_modified(

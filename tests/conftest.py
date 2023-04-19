@@ -7,14 +7,14 @@ import os
 import pathlib
 import subprocess
 import uuid
-from typing import Dict
+from typing import Dict, Union
 
 import oss2
 import pytest
 import requests
 from oss2 import Auth
 
-from ossfs import OSSFileSystem
+from ossfs import AioOSSFileSystem, OSSFileSystem
 
 PORT = 5555
 AccessKeyId = os.environ.get("OSS_ACCESS_KEY_ID", "")
@@ -85,8 +85,13 @@ def init_config(endpoint) -> Dict:
 
 
 @pytest.fixture()
-def ossfs(init_config: Dict) -> "OSSFileSystem":
-    return OSSFileSystem(**init_config)
+def ossfs(request, init_config: Dict) -> Union["OSSFileSystem", "AioOSSFileSystem"]:
+    if hasattr(request, "param") and request.param == "async":
+        ossfs = AioOSSFileSystem(**init_config)
+    else:
+        ossfs = OSSFileSystem(**init_config)
+    ossfs.invalidate_cache()
+    return ossfs
 
 
 @pytest.fixture(scope="session")
@@ -100,10 +105,8 @@ def bucket(auth: "Auth", endpoint: str, test_bucket_name: str):
 
 
 @pytest.fixture(scope="session")
-def file_in_anonymous(
-    auth: "Auth", endpoint: str, test_directory: str, anonymous_bucket_name: str
-) -> str:
-    file = f"{test_directory}/file"
+def file_in_anonymous(auth: "Auth", endpoint: str, anonymous_bucket_name: str) -> str:
+    file = "file"
     bucket = oss2.Bucket(auth, endpoint, anonymous_bucket_name)
     bucket.put_object(file, "foobar")
     return f"/{anonymous_bucket_name}/{file}"

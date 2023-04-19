@@ -4,7 +4,7 @@ Code of base class of OSSFileSystem
 import logging
 import os
 import re
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 from fsspec.spec import AbstractFileSystem
 from fsspec.utils import stringify_path
@@ -15,10 +15,11 @@ logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
 
+if TYPE_CHECKING:
+    from oss2.models import SimplifiedObjectInfo
+
 
 DEFAULT_POOL_SIZE = 20
-DEFAULT_RETRIES = 5
-DEFAULT_READ_TIMEOUT = 15
 DEFAULT_BLOCK_SIZE = 5 * 2**20
 SIMPLE_TRANSFER_THRESHOLD = multiget_threshold
 
@@ -179,3 +180,39 @@ class BaseOSSFileSystem(AbstractFileSystem):
             while norm_path:
                 self.dircache.pop(norm_path, None)
                 norm_path = self._parent(norm_path)
+
+    def _transfer_object_info_to_dict(
+        self, bucket: str, obj: "SimplifiedObjectInfo"
+    ) -> Dict:
+        data: Dict[str, Any] = {
+            "Key": obj.key,
+            "type": "file",
+            "Size": obj.size,
+            "StorageClass": "OBJECT",
+        }
+        if obj.last_modified:
+            data["LastModified"] = obj.last_modified
+        if obj.is_prefix():
+            data["type"] = "directory"
+            data["Size"] = 0
+        self._fill_info(data, bucket)
+        return data
+
+    @staticmethod
+    def _fill_info(file: Dict[str, Any], bucket: Optional[str] = None):
+        file["size"] = file["Size"]
+        if bucket:
+            file["Key"] = "/".join([bucket, file["Key"]])
+        file["name"] = file["Key"]
+
+    def _post_process_ls_result(self, path: str, files: List[Dict[str, Any]]):
+        if path.startswith("/"):
+            for file in files:
+                file["name"] = f'/{file["name"].lstrip("/")}'
+                file["Key"] = f'/{file["Key"].lstrip("/")}'
+        else:
+            for file in files:
+                file["name"] = f'/{file["name"].lstrip("/")}'
+                file["Key"] = f'/{file["Key"].lstrip("/")}'
+
+        return files
