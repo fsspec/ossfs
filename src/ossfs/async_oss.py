@@ -1,7 +1,6 @@
 """
 Code of AioOSSFileSystem
 """
-import copy
 import logging
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
@@ -9,14 +8,16 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 import aiooss2
 from aiooss2 import AioBucket, AioService, AnonymousAuth
 from aiooss2.http import AioSession
-from fsspec.asyn import AsyncFileSystem, sync, sync_wrapper
+from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.exceptions import FSTimeoutError
-from oss2.exceptions import ClientError
+from oss2.exceptions import AccessDenied, ClientError, NotFound
 
 from .base import DEFAULT_POOL_SIZE, BaseOSSFileSystem
+from .utils import async_pretify_info_result
 
 if TYPE_CHECKING:
     from oss2.models import (
+        HeadObjectResult,
         ListBucketsResult,
         SimplifiedBucketInfo,
         SimplifiedObjectInfo,
@@ -157,26 +158,23 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         norm_path = path.strip("/")
         if norm_path in self.dircache and not refresh and not prefix and delimiter:
             return self.dircache[norm_path]
-        logger.debug("Get directory listing page for %s", norm_path)
+        logger.debug("Get directory listing for %s", norm_path)
         bucket, key = self.split_path(norm_path)
-        if not delimiter or prefix:
-            if key:
-                prefix = f"{key}/{prefix}"
-        else:
-            if key:
-                prefix = f"{key}/"
-            files = []
-            async for obj_dict in self._iterdir(
-                bucket,
-                max_keys=max_items,
-                delimiter=delimiter,
-                prefix=prefix,
-            ):
-                files.append(obj_dict)
+        prefix = prefix or ""
+        if key:
+            prefix = f"{key}/{prefix}"
+        files = []
+        async for obj_dict in self._iterdir(
+            bucket,
+            max_keys=max_items,
+            delimiter=delimiter,
+            prefix=prefix,
+        ):
+            files.append(obj_dict)
 
+        if not prefix and delimiter == "/":
             self.dircache[norm_path] = files
-        result = copy.deepcopy(self.dircache[norm_path])
-        return self._post_process_ls_result(path, result)
+        return files
 
     async def _iterdir(
         self,
@@ -201,12 +199,12 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             data = self._transfer_object_info_to_dict(bucket, obj)
             yield data
 
-    async def _ls_buckets(self, path, refresh: bool = False) -> List[Dict[str, Any]]:
+    async def _ls_buckets(self, refresh: bool = False) -> List[Dict[str, Any]]:
         if "" not in self.dircache or refresh:
-            results: List[Dict[str, Any]] = []
             if isinstance(self._auth, AnonymousAuth):
                 logging.warning("cannot list buckets if not logged in")
                 return []
+            results: List[Dict[str, Any]] = []
             try:
                 files: "ListBucketsResult" = await self._call_oss("list_buckets")
             except ClientError:
@@ -215,17 +213,16 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             file: "SimplifiedBucketInfo"
             for file in files.buckets:
                 data: Dict[str, Any] = {}
-                data["Key"] = file.name
-                data["Size"] = 0
-                data["StorageClass"] = "BUCKET"
+                data["name"] = file.name
+                data["size"] = 0
                 data["type"] = "directory"
-                self._fill_info(data)
                 results.append(data)
-            self.dircache[""] = copy.deepcopy(results)
+            self.dircache[""] = results
         else:
             results = self.dircache[""]
-        return self._post_process_ls_result(path, results)
+        return results
 
+    @async_pretify_info_result
     async def _ls(self, path: str, detail: bool = True, **kwargs):
         """List files in given bucket, or list of buckets.
 
@@ -244,9 +241,9 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         refresh = kwargs.pop("refresh", False)
         norm_path = self._strip_protocol(path).strip("/")
         if norm_path != "":
-            files = await self._ls_dir(norm_path, refresh)
+            files = await self._ls_dir(path, refresh)
             if not files and "/" in norm_path:
-                files = await self._ls_dir(self._parent(norm_path), refresh=refresh)
+                files = await self._ls_dir(self._parent(path), refresh=refresh)
                 files = [
                     file
                     for file in files
@@ -254,11 +251,103 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                     and file["type"] != "directory"
                 ]
         else:
-            files = await self._ls_buckets(path, refresh)
-        return (
-            sorted(files, key=lambda i: i["name"])
-            if detail
-            else sorted(info["name"] for info in files)
-        )
+            files = await self._ls_buckets(refresh)
+        return files
 
-    ls = sync_wrapper(_ls)
+    @async_pretify_info_result
+    async def _info(self, path: str, **kwargs):
+        norm_path = self._strip_protocol(path).lstrip("/")
+        if norm_path == "":
+            result = {"name": path, "size": 0, "type": "directory"}
+            return result
+        bucket, key = self.split_path(norm_path)
+        refresh = kwargs.pop("refresh", False)
+        if not refresh:
+            out = self._ls_from_cache(norm_path)
+            if out is not None:
+                out = [o for o in out if o["name"].strip("/") == norm_path]
+                if out:
+                    result = out[0]
+                else:
+                    result = {"name": norm_path, "size": 0, "type": "directory"}
+                return result
+
+        if key:
+            try:
+                obj_out: "HeadObjectResult" = await self._call_oss(
+                    "head_object",
+                    bucket=bucket,
+                    key=key,
+                )
+                result = {
+                    "LastModified": obj_out.last_modified,
+                    "size": obj_out.content_length,
+                    "name": path,
+                    "type": "file",
+                }
+                return result
+            except (NotFound, AccessDenied):
+                pass
+            # We check to see if the path is a directory by attempting to list its
+            # contexts. If anything is found, it is indeed a directory
+            try:
+                ls_out = await self._call_oss(
+                    "AioObjectIterator",
+                    bucket=bucket,
+                    prefix=key.rstrip("/") + "/",
+                    delimiter="/",
+                    max_keys=100,
+                )
+                async for _ in ls_out:
+                    return {
+                        "size": 0,
+                        "name": path,
+                        "type": "directory",
+                    }
+            except (NotFound, AccessDenied):
+                pass
+        else:
+            for bucket_info in await self._ls_buckets():
+                if bucket_info["name"] == norm_path.rstrip("/"):
+                    return {
+                        "size": 0,
+                        "name": path,
+                        "type": "directory",
+                    }
+        raise FileNotFoundError(norm_path)
+
+    def _cache_result_analysis(self, norm_path: str, parent: str) -> bool:
+        if norm_path in self.dircache:
+            for file_info in self.dircache[norm_path]:
+                # For files the dircache can contain itself.
+                # If it contains anything other than itself it is a directory.
+                if file_info["name"] != norm_path:
+                    return True
+            return False
+
+        for file_info in self.dircache[parent]:
+            if file_info["name"] == norm_path:
+                # If we find ourselves return whether we are a directory
+                return file_info["type"] == "directory"
+        return False
+
+    async def _isdir(self, path: str) -> bool:
+        norm_path = self._strip_protocol(path).strip("/")
+        # Send buckets to super
+        if norm_path == "":
+            return True
+        if "/" not in norm_path:
+            for bucket_info in await self._ls_buckets():
+                if bucket_info["name"] == norm_path:
+                    return True
+            return False
+
+        parent = self._parent(norm_path)
+        if norm_path in self.dircache or parent in self.dircache:
+            return self._cache_result_analysis(norm_path, parent)
+
+        # This only returns things within the path and NOT the path object itself
+        try:
+            return bool(await self._ls_dir(norm_path))
+        except FileNotFoundError:
+            return False
