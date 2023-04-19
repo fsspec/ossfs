@@ -6,13 +6,18 @@ import logging
 import os
 from datetime import datetime
 from hashlib import sha256
-from typing import Callable, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import oss2
+from oss2.auth import AnonymousAuth
 
 from .base import SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
-from .exceptions import translate_boto_error
+from .exceptions import translate_oss_error
 from .file import OSSFile
+
+if TYPE_CHECKING:
+    from oss2.models import SimplifiedObjectInfo
+
 
 logger = logging.getLogger("ossfs")
 
@@ -109,7 +114,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 logger.debug("Nonretryable error: %s", err)
                 error = err
                 break
-        raise translate_boto_error(error)
+        raise translate_oss_error(error)
 
     def _open(
         self,
@@ -148,55 +153,29 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             **kwargs,
         )
 
-    def _ls_bucket(self, connect_timeout: Optional[int]) -> List[Dict]:
-        result = []
-        for bucket in self._call_oss("BucketIterator", timeout=connect_timeout):
-            result.append(
-                {
-                    "name": bucket.name,
-                    "Key": bucket.name,
-                    "type": "directory",
-                    "size": 0,
-                    "Size": 0,
-                    "StorageClass": "BUCKET",
-                    "CreateTime": bucket.creation_date,
-                }
-            )
-        return result
-
-    def _ls_object(self, path: str, connect_timeout: Optional[int]) -> List[Dict]:
-        bucket_name, obj_name = self.split_path(path)
-        if not obj_name or not bucket_name:
-            return []
-        if not self._call_oss(
-            "object_exists",
-            obj_name,
-            bucket=bucket_name,
-            timeout=connect_timeout,
-        ):
-            return []
-        simplifiedmeta = self._call_oss(
-            "get_object_meta",
-            obj_name,
-            bucket=bucket_name,
-            timeout=connect_timeout,
-        )
-        info = {
-            "name": path,
-            "Key": path,
-            "type": "file",
-            "size": int(simplifiedmeta.headers["Content-Length"]),
-            "Size": int(simplifiedmeta.headers["Content-Length"]),
-            "StorageClass": "OBJECT",
-        }
-        if "Last-Modified" in simplifiedmeta.headers:
-            info["LastModified"] = int(
-                datetime.strptime(
-                    simplifiedmeta.headers["Last-Modified"],
-                    "%a, %d %b %Y %H:%M:%S %Z",
-                ).timestamp()
-            )
-        return [info]
+    def _ls_bucket(self, path, connect_timeout: Optional[int]) -> List[Dict[str, Any]]:
+        if "" not in self.dircache:
+            results: List[Dict[str, Any]] = []
+            if isinstance(self._auth, AnonymousAuth):
+                logging.warning("cannot list buckets if not logged in")
+                return results
+            try:
+                for bucket in self._call_oss("BucketIterator", timeout=connect_timeout):
+                    result = {
+                        "Key": bucket.name,
+                        "type": "directory",
+                        "Size": 0,
+                        "StorageClass": "BUCKET",
+                        "CreateTime": bucket.creation_date,
+                    }
+                    self._fill_info(result)
+                    results.append(result)
+            except oss2.exceptions.ClientError:
+                pass
+            self.dircache[""] = copy.deepcopy(results)
+        else:
+            results = self.dircache[""]
+        return self._post_process_ls_result(path, results)
 
     def _get_object_info_list(
         self,
@@ -210,6 +189,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         fsspec form of file info
         """
         result = []
+        obj: "SimplifiedObjectInfo"
         for obj in self._call_oss(
             "ObjectIterator",
             prefix=prefix,
@@ -217,20 +197,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             bucket=bucket_name,
             timeout=connect_timeout,
         ):
-            data = {
-                "name": f"{bucket_name}/{obj.key}",
-                "Key": f"{bucket_name}/{obj.key}",
-                "type": "file",
-                "size": obj.size,
-                "Size": obj.size,
-                "StorageClass": "OBJECT",
-            }
-            if obj.last_modified:
-                data["LastModified"] = obj.last_modified
-            if obj.is_prefix():
-                data["type"] = "directory"
-                data["size"] = 0
-                data["Size"] = 0
+            data = self._transfer_object_info_to_dict(bucket_name, obj)
             result.append(data)
         return result
 
@@ -238,52 +205,59 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         self,
         path: str,
         delimiter: str = "/",
-        prefix: Optional[str] = None,
+        refresh: bool = False,
+        prefix: str = "",
         connect_timeout: Optional[int] = None,
+        **kwargs,  # pylint: disable=too-many-arguments
     ) -> List[Dict]:
         norm_path = path.strip("/")
-        bucket_name, key = self.split_path(norm_path)
-        if not prefix:
-            prefix = ""
+        if norm_path in self.dircache and not refresh and not prefix and delimiter:
+            result = copy.deepcopy(self.dircache[norm_path])
+            return self._post_process_ls_result(path, result)
 
+        logger.debug("Get directory listing page for %s", norm_path)
+        bucket_name, key = self.split_path(norm_path)
         if not delimiter or prefix:
             if key:
                 prefix = f"{key}/{prefix}"
-            infos = self._get_object_info_list(
-                bucket_name, prefix, delimiter, connect_timeout
-            )
         else:
+            if norm_path in self.dircache and not refresh:
+                return self.dircache[norm_path]
             if key:
                 prefix = f"{key}/"
-            if norm_path not in self.dircache:
-                self.dircache[norm_path] = self._get_object_info_list(
-                    bucket_name, prefix, delimiter, connect_timeout
-                )
-            infos = copy.deepcopy(self.dircache[norm_path])
-        if path.startswith("/"):
-            for info in infos:
-                info["name"] = f'/{info["name"]}'
-                info["Key"] = f'/{info["Key"]}'
-        return infos
+
+        try:
+            self.dircache[norm_path] = self._get_object_info_list(
+                bucket_name, prefix, delimiter, connect_timeout
+            )
+            result = copy.deepcopy(self.dircache[norm_path])
+            return self._post_process_ls_result(path, result)
+        except oss2.exceptions.AccessDenied:
+            return []
 
     def ls(self, path: str, detail: bool = True, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", 60)
-        bucket_name, _ = self.split_path(path)
-        if bucket_name:
-            try:
-                infos = self._ls_dir(path, connect_timeout=connect_timeout)
-            except oss2.exceptions.AccessDenied:
-                infos = []
-            if not infos:
-                infos = self._ls_object(path, connect_timeout)
+        norm_path = self._strip_protocol(path).strip("/")
+        if norm_path == "":
+            files = self._ls_bucket(path, connect_timeout)
         else:
-            infos = self._ls_bucket(connect_timeout)
+            files = self._ls_dir(path, connect_timeout=connect_timeout)
+            if not files and "/" in norm_path:
+                files = self._ls_dir(
+                    self._parent(path), connect_timeout=connect_timeout
+                )
+                files = [
+                    file
+                    for file in files
+                    if file["type"] != "directory"
+                    and file["name"].strip("/") == norm_path
+                ]
 
-        if not infos:
-            return infos
-        if detail:
-            return sorted(infos, key=lambda i: i["name"])
-        return sorted(info["name"] for info in infos)
+        return (
+            sorted(files, key=lambda i: i["name"])
+            if detail
+            else sorted(info["name"] for info in files)
+        )
 
     def find(
         self,
@@ -309,7 +283,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         """
         path = self._strip_protocol(path)
         out = {}
-        prefix = kwargs.pop("prefix", None)
+        prefix = kwargs.pop("prefix", "")
         if (withdirs or maxdepth) and prefix:
             raise ValueError(
                 "Can not specify 'prefix' option alongside "
@@ -352,7 +326,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             return False
         return True
 
-    def exists(self, path: str, **kwargs):
+    def exists(self, path: str, **kwargs) -> bool:
         """Is there a file at the given path"""
         bucket_name, obj_name = self.split_path(path)
 

@@ -72,4 +72,4 @@ def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch):
 
 def test_anonymous_login(file_in_anonymous: str, endpoint: str):
     ossfs = OSSFileSystem(endpoint=endpoint)
-    ossfs.cat(f"{file_in_anonymous}")
+    ossfs.get_object(file_in_anonymous, 1, 100)
