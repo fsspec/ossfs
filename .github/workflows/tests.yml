@@ -50,9 +50,9 @@ jobs:
         OSS_TEST_STS_ID: ${{ secrets.OSS_TEST_STS_ID}}
         OSS_TEST_STS_KEY: ${{ secrets.OSS_TEST_STS_KEY}}
         OSS_TEST_STS_ARN: ${{ secrets.OSS_TEST_STS_ARN}}
-        OSS_ENDPOINT: ${{ secrets.OSS_ENDPOINT}}
-        OSS_TEST_BUCKET_NAME: ${{ secrets.OSS_TEST_BUCKET_NAME}}
-        OSS_TEST_ANONYMOUS_BUCKET_NAME: ${{ secrets.OSS_TEST_ANONYMOUS_BUCKET_NAME}}
+        OSS_ENDPOINT: ${{ vars.OSS_ENDPOINT}}
+        OSS_TEST_BUCKET_NAME: ${{ vars.OSS_TEST_BUCKET_NAME}}
+        OSS_TEST_ANONYMOUS_BUCKET_NAME: ${{ vars.OSS_TEST_ANONYMOUS_BUCKET_NAME}}
       run: nox -s tests-${{ matrix.nox_pyv || matrix.pyv }} -- --cov-report=xml
 
     - name: Upload coverage report
