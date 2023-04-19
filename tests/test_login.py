@@ -6,13 +6,14 @@ Sts, anonymous, accesskey
 # pylint:disable=missing-function-docstring
 import json
 import os
+from typing import Union
 
 import oss2
 import pytest
 from aliyunsdkcore import client
 from aliyunsdksts.request.v20150401 import AssumeRoleRequest
 
-from ossfs import OSSFileSystem
+from ossfs import AioOSSFileSystem, OSSFileSystem
 
 STSAccessKeyId = os.getenv("OSS_TEST_STS_ID", "")
 STSAccessKeySecret = os.getenv("OSS_TEST_STS_KEY", "")
@@ -38,35 +39,48 @@ def fetch_sts_token(access_key_id: str, access_key_secret: str, role_arn: str):
     return access_key_id, access_key_secret, security_token
 
 
-def test_access_key_login(ossfs: "OSSFileSystem", test_bucket_name: str):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_access_key_login(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_bucket_name: str
+):
     ossfs.ls(test_bucket_name)
 
 
-def test_sts_login(endpoint: str, test_bucket_name: str):
+@pytest.mark.parametrize("aio", [False, True])
+def test_sts_login(endpoint: str, test_bucket_name: str, aio: bool):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
-    ossfs = OSSFileSystem(
-        key=key,
-        secret=secret,
-        token=token,
-        endpoint=endpoint,
-    )
+    kwargs = {"key": key, "secret": secret, "token": token, "endpoint": endpoint}
+    if aio:
+        ossfs = AioOSSFileSystem(**kwargs)
+    else:
+        ossfs = OSSFileSystem(**kwargs)
     ossfs.ls(test_bucket_name)
 
 
-def test_set_endpoint(endpoint: str, test_bucket_name: str, monkeypatch):
+@pytest.mark.parametrize("aio", [False, True])
+def test_set_endpoint(endpoint: str, test_bucket_name: str, monkeypatch, aio: bool):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.delenv("OSS_ENDPOINT")
-    ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
+    kwargs = {"key": key, "secret": secret, "token": token, "endpoint": None}
+    if aio:
+        ossfs = AioOSSFileSystem(**kwargs)
+    else:
+        ossfs = OSSFileSystem(**kwargs)
     with pytest.raises(ValueError):
         ossfs.ls(test_bucket_name)
     ossfs.set_endpoint(endpoint)
     ossfs.ls(test_bucket_name)
 
 
-def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch):
+@pytest.mark.parametrize("aio", [False, True])
+def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch, aio: bool):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.setenv("OSS_ENDPOINT", endpoint)
-    ossfs = OSSFileSystem(key=key, secret=secret, token=token, endpoint=None)
+    kwargs = {"key": key, "secret": secret, "token": token, "endpoint": None}
+    if aio:
+        ossfs = AioOSSFileSystem(**kwargs)
+    else:
+        ossfs = OSSFileSystem(**kwargs)
     ossfs.ls(test_bucket_name)
 
 

@@ -73,7 +73,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         """
         get the new aio bucket instance
         """
-        if not self._endpoint:
+        if self._endpoint is None:
             raise ValueError("endpoint is required")
         try:
             return AioBucket(
@@ -123,7 +123,8 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         timeout: Optional[int] = None,
         **kwargs,
     ):
-        assert self._endpoint
+        if self._endpoint is None:
+            raise ValueError("endpoint is required")
         await self.set_session()
         if bucket:
             service: Union[AioService, AioBucket] = self._get_bucket(bucket, timeout)
