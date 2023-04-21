@@ -407,3 +407,45 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 progress_callback=callback,
                 **kwargs,
             )
+
+    @async_pretify_info_result
+    async def _find(
+        self,
+        path: str,
+        maxdepth: Optional[int] = None,
+        withdirs: bool = False,
+        detail: bool = False,  # pylint: disable=unused-argument
+        **kwargs,
+    ):
+        """List all files below path.
+        Like posix ``find`` command without conditions
+
+        Parameters
+        ----------
+        path : str
+        maxdepth: int or None
+            If not None, the maximum number of levels to descend
+        withdirs: bool
+            Whether to include directory paths in the output. This is True
+            when used by glob, but users usually only want files.
+        prefix: str
+            Only return files that match ``^{path}/{prefix}`` (if there is an
+            exact match ``filename == {path}/{prefix}``, it also will be included)
+        """
+        out = {}
+        prefix = kwargs.pop("prefix", "")
+        path = self._verify_find_arguments(path, maxdepth, withdirs, prefix)
+        if prefix:
+            for info in await self._ls_dir(path, delimiter="", prefix=prefix):
+                out.update({info["name"]: info})
+        else:
+            async for _, dirs, files in self._walk(path, maxdepth, detail=True):
+                if withdirs:
+                    files.update(dirs)
+                out.update({info["name"]: info for _, info in files.items()})
+            if await self._isfile(path) and path not in out:
+                # walk works on directories, but find should also return [path]
+                # when path happens to be a file
+                out[path] = {}
+        names = sorted(out)
+        return {name: out[name] for name in names}

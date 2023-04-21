@@ -195,3 +195,17 @@ class BaseOSSFileSystem(AbstractFileSystem):
             data["type"] = "directory"
             data["size"] = 0
         return data
+
+    def _verify_find_arguments(
+        self, path: str, maxdepth: Optional[int], withdirs: bool, prefix: str
+    ) -> str:
+        path = self._strip_protocol(path)
+        bucket, _ = self.split_path(path)
+        if not bucket:
+            raise ValueError("Cannot traverse all of the buckets")
+        if (withdirs or maxdepth) and prefix:
+            raise ValueError(
+                "Can not specify 'prefix' option alongside "
+                "'withdirs'/'maxdepth' options."
+            )
+        return path

@@ -256,14 +256,9 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             when used by glob, but users usually only want files.
         kwargs are passed to ``ls``.
         """
-        path = self._strip_protocol(path)
         out = {}
         prefix = kwargs.pop("prefix", "")
-        if (withdirs or maxdepth) and prefix:
-            raise ValueError(
-                "Can not specify 'prefix' option alongside "
-                "'withdirs'/'maxdepth' options."
-            )
+        path = self._verify_find_arguments(path, maxdepth, withdirs, prefix)
         if prefix:
             connect_timeout = kwargs.get("connect_timeout", None)
             for info in self._ls_dir(
