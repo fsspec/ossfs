@@ -92,3 +92,21 @@ def async_pretify_info_result(func):
         return _format_unify(path, result, detail)
 
     return wrapper
+
+
+def as_progress_handler(callback):
+    """progress bar handler"""
+    if callback is None:
+        return None
+
+    sent_total = False
+
+    def progress_handler(absolute_progress, total_size):
+        nonlocal sent_total
+        if not sent_total:
+            callback.set_size(total_size)
+            sent_total = True
+
+        callback.absolute_update(absolute_progress)
+
+    return progress_handler

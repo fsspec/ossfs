@@ -15,30 +15,13 @@ from oss2.auth import AnonymousAuth
 from .base import SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
 from .exceptions import translate_oss_error
 from .file import OSSFile
-from .utils import pretify_info_result
+from .utils import as_progress_handler, pretify_info_result
 
 if TYPE_CHECKING:
     from oss2.models import SimplifiedObjectInfo
 
 
 logger = logging.getLogger("ossfs")
-
-
-def _as_progress_handler(callback):
-    if callback is None:
-        return None
-
-    sent_total = False
-
-    def progress_handler(absolute_progress, total_size):
-        nonlocal sent_total
-        if not sent_total:
-            callback.set_size(total_size)
-            sent_total = True
-
-        callback.absolute_update(absolute_progress)
-
-    return progress_handler
 
 
 class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-methods
@@ -448,24 +431,24 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         """
         Copy single remote file to local
         """
-        kwargs.setdefault("progress_callback", _as_progress_handler(callback))
+        bucket_name, obj_name = self.split_path(rpath)
+        kwargs.setdefault("progress_callback", as_progress_handler(callback))
         if self.isdir(rpath):
             os.makedirs(lpath, exist_ok=True)
+            return
+        connect_timeout = kwargs.pop("connect_timeout", None)
+        bucket = self._get_bucket(bucket_name, connect_timeout)
+        if self.size(rpath) >= SIMPLE_TRANSFER_THRESHOLD:
+            oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
         else:
-            bucket_name, obj_name = self.split_path(rpath)
-            connect_timeout = kwargs.pop("connect_timeout", None)
-            bucket = self._get_bucket(bucket_name, connect_timeout)
-            if self.size(rpath) >= SIMPLE_TRANSFER_THRESHOLD:
-                oss2.resumable_download(bucket, obj_name, lpath, **kwargs)
-            else:
-                self._call_oss(
-                    "get_object_to_file",
-                    obj_name,
-                    lpath,
-                    bucket=bucket_name,
-                    timeout=connect_timeout,
-                    **kwargs,
-                )
+            self._call_oss(
+                "get_object_to_file",
+                obj_name,
+                lpath,
+                bucket=bucket_name,
+                timeout=connect_timeout,
+                **kwargs,
+            )
 
     def put_file(
         self, lpath: str, rpath: str, callback: Optional[Callable] = None, **kwargs
@@ -473,11 +456,14 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         """
         Copy single file to remote
         """
-        kwargs.setdefault("progress_callback", _as_progress_handler(callback))
+        kwargs.setdefault("progress_callback", as_progress_handler(callback))
+        bucket_name, obj_name = self.split_path(rpath)
         if os.path.isdir(lpath):
-            self.makedirs(rpath, exist_ok=True)
+            if obj_name:
+                # don't make remote "directory"
+                return
+            self.mkdir(lpath)
         else:
-            bucket_name, obj_name = self.split_path(rpath)
             connect_timeout = kwargs.pop("connect_timeout", None)
             bucket = self._get_bucket(bucket_name, connect_timeout)
             if os.path.getsize(lpath) >= SIMPLE_TRANSFER_THRESHOLD:

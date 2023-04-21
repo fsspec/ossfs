@@ -56,6 +56,7 @@ def test_info(
 
 
 def test_checksum(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    # don't make local "directory"
     function_name = inspect.stack()[0][0].f_code.co_name
     object_name = f"{test_path}/{function_name}"
 
@@ -82,7 +83,10 @@ def test_checksum(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_ls_object(
-    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+    # don't make local "directory"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    test_path: str,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -105,6 +109,7 @@ def test_ls_dir(
 
 
 def test_ls_and_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+    # don't make local "directory"
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     file_a = path + "a"
@@ -120,7 +125,10 @@ def test_ls_and_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_isfile(
-    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+    # don't make local "directory"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    test_path: str,
+    bucket: "Bucket",
 ):
     "test isfile in ossfs"
     function_name = inspect.stack()[0][0].f_code.co_name
@@ -283,12 +291,17 @@ def test_move(
     assert not bucket.object_exists(bucket_relative_path(from_file))
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 @pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
 def test_get_put(
-    ossfs: "OSSFileSystem", tmpdir, test_path: str, size: int, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    tmpdir,
+    test_path: str,
+    size: int,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
 
     local_file = str(tmpdir.join("number"))
     data = os.urandom(size)
@@ -311,7 +324,7 @@ def test_pipe_cat_big(
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     bigfile = path + "bigfile"
-    data = b"1234567890A" * size
+    data = os.urandom(size)
     ossfs.pipe(bigfile, data)
     assert bucket.get_object(bucket_relative_path(bigfile)).read() == data
 
@@ -374,8 +387,12 @@ def test_cat_missing(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     assert isinstance(out[file2], FileNotFoundError)
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_get_directories(
-    ossfs: "OSSFileSystem", tmpdir, test_path: str, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    tmpdir,
+    test_path: str,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -523,7 +540,10 @@ WRITE_BLOCK_SIZE = 2**13  # 8KB blocks
 READ_BLOCK_SIZE = 2**14  # 16KB blocks
 
 
-def test_get_put_file(ossfs: "OSSFileSystem", tmpdir, test_path: str):
+@pytest.mark.parametrize("ossfs", ["sync"], indirect=True)
+def test_get_put_file(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], tmpdir, test_path: str
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     src_file = str(tmpdir / "source")
