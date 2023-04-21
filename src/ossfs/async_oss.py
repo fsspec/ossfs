@@ -524,3 +524,33 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         return obj_stream.server_crc
 
     checksum = sync_wrapper(_checksum)
+
+    async def _cp_file(self, path1: str, path2: str, **kwargs):
+        """Copy file between locations on OSS.
+
+        preserve_etag: bool
+            Whether to preserve etag while copying. If the file is uploaded
+            as a single part, then it will be always equalivent to the md5
+            hash of the file hence etag will always be preserved. But if the
+            file is uploaded in multi parts, then this option will try to
+            reproduce the same multipart upload while copying and preserve
+            the generated etag.
+        """
+        bucket1, key1 = self.split_path(path1)
+        bucket2, key2 = self.split_path(path2)
+        self.invalidate_cache(self._parent(path2))
+        if bucket1 != bucket2:
+            tempdir = "." + self.ukey(path1)
+            await self._get_file(path1, tempdir, **kwargs)
+            await self._put_file(tempdir, path2, **kwargs)
+            os.remove(tempdir)
+        else:
+            connect_timeout = kwargs.pop("connect_timeout", None)
+            await self._call_oss(
+                "copy_object",
+                bucket1,
+                key1,
+                key2,
+                bucket=bucket1,
+                timeout=connect_timeout,
+            )
