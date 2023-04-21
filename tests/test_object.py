@@ -281,8 +281,12 @@ def test_ossfs_glob(
     assert file2 not in ossfs.glob(path + "nested/file.*")
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_copy(
-    ossfs: "OSSFileSystem", number_file: str, test_path: str, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    number_file: str,
+    test_path: str,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -291,11 +295,15 @@ def test_copy(
     assert bucket.get_object(bucket_relative_path(new_file)).read() == NUMBERS
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_move(
-    ossfs: "OSSFileSystem", number_file: str, test_path: str, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    number_file: str,
+    test_path: str,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
     from_file = path + "from"
     to_file = path + "to"
     ossfs.copy(number_file, from_file)
@@ -512,8 +520,9 @@ def test_exists(
     assert not ossfs.exists(path + "starting/very/similar/prefix/")
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_leading_forward_slash(
-    ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"

@@ -344,6 +344,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         """
         bucket_name1, obj_name1 = self.split_path(path1)
         bucket_name2, obj_name2 = self.split_path(path2)
+        self.invalidate_cache(self._parent(path2))
         if bucket_name1 != bucket_name2:
             tempdir = "." + self.ukey(path1)
             self.get_file(path1, tempdir, **kwargs)
@@ -359,7 +360,6 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 bucket=bucket_name1,
                 timeout=connect_timeout,
             )
-        self.invalidate_cache(self._parent(path2))
 
     def _rm(self, path: Union[str, List[str]]):
         """Delete files.
