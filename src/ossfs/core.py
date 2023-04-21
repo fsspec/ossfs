@@ -99,7 +99,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 logger.debug("Nonretryable error: %s", err)
                 error = err
                 break
-        raise translate_oss_error(error)
+        raise translate_oss_error(error) from error
 
     def _open(
         self,
@@ -374,8 +374,23 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 self._rm(file)
             return
         bucket_name, obj_name = self.split_path(path)
-        self._call_oss("delete_object", obj_name, bucket=bucket_name)
         self.invalidate_cache(self._parent(path))
+        self._call_oss("delete_object", obj_name, bucket=bucket_name)
+
+    def _bulk_delete(self, pathlist, **kwargs):
+        """
+        Remove multiple keys with one call
+
+        Parameters
+        ----------
+        pathlist : list(str)
+            The keys to remove, must all be in the same bucket.
+            Must have 0 < len <= 1000
+        """
+        if not pathlist:
+            return
+        bucket, key_list = self._get_batch_delete_key_list(pathlist)
+        self._call_oss("batch_delete_objects", key_list, bucket=bucket)
 
     def rm(self, path: Union[str, List[str]], recursive=False, maxdepth=None):
         """Delete files.
@@ -398,18 +413,14 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 self.rm(file)
             return
 
-        bucket_name, _ = self.split_path(path)
         path_expand = self.expand_path(path, recursive=recursive, maxdepth=maxdepth)
-        path_expand = [self.split_path(file)[1] for file in path_expand]
 
         def chunks(lst: list, num: int):
             for i in range(0, len(lst), num):
                 yield lst[i : i + num]
 
         for files in chunks(path_expand, 1000):
-            self._call_oss("batch_delete_objects", files, bucket=bucket_name)
-
-        self.invalidate_cache(self._parent(path))
+            self._bulk_delete(files)
 
     def get_path(self, rpath: str, lpath: str, **kwargs):
         """

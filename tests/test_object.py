@@ -55,7 +55,10 @@ def test_info(
     ossfs.info(file_path + "bar")
 
 
-def test_checksum(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_checksum(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     # don't make local "directory"
     function_name = inspect.stack()[0][0].f_code.co_name
     object_name = f"{test_path}/{function_name}"
@@ -159,7 +162,10 @@ def test_isdir(
     assert ossfs.isdir(path.rstrip("/"))
 
 
-def test_rm(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_rm(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     file_foo = path + "foo"
@@ -175,7 +181,10 @@ def test_rm(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     assert not bucket.object_exists(bucket_relative_path(nest_file))
 
 
-def test_bulk_delete(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_bulk_delete(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     nest_file1 = path + "nested/file1"

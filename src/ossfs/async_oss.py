@@ -4,16 +4,18 @@ Code of AioOSSFileSystem
 import logging
 import os
 import weakref
+from hashlib import sha256
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 import aiooss2
 from aiooss2 import AioBucket, AioService, AnonymousAuth
 from aiooss2.http import AioSession
-from fsspec.asyn import AsyncFileSystem, sync
+from fsspec.asyn import AsyncFileSystem, _run_coros_in_chunks, sync, sync_wrapper
 from fsspec.exceptions import FSTimeoutError
-from oss2.exceptions import AccessDenied, ClientError, NotFound
+from oss2.exceptions import ClientError, OssError, RequestError
 
 from .base import DEFAULT_POOL_SIZE, SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
+from .exceptions import translate_oss_error
 from .utils import as_progress_handler, async_pretify_info_result
 
 if TYPE_CHECKING:
@@ -139,14 +141,18 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 app_name="ossfs",
             )
         method = getattr(service, method_name, None)
-        if not method:
-            method = getattr(aiooss2, method_name)
-            logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
-            out = method(service, *args, **kwargs)
-        else:
-            logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
-            out = await method(*args, **kwargs)
-        return out
+        try:
+            if not method:
+                method = getattr(aiooss2, method_name)
+                logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
+                out = method(service, *args, **kwargs)
+            else:
+                logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
+                out = await method(*args, **kwargs)
+            return out
+        except (RequestError, OssError) as err:
+            error = err
+        raise translate_oss_error(error) from error
 
     async def _ls_dir(  # pylint: disable=too-many-arguments
         self,
@@ -277,8 +283,8 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             try:
                 obj_out: "HeadObjectResult" = await self._call_oss(
                     "head_object",
+                    key,
                     bucket=bucket,
-                    key=key,
                 )
                 result = {
                     "LastModified": obj_out.last_modified,
@@ -287,7 +293,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                     "type": "file",
                 }
                 return result
-            except (NotFound, AccessDenied):
+            except (PermissionError, FileNotFoundError):
                 pass
             # We check to see if the path is a directory by attempting to list its
             # contexts. If anything is found, it is indeed a directory
@@ -305,7 +311,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                         "name": path,
                         "type": "directory",
                     }
-            except (NotFound, AccessDenied):
+            except (PermissionError, FileNotFoundError):
                 pass
         else:
             for bucket_info in await self._ls_buckets():
@@ -449,3 +455,72 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 out[path] = {}
         names = sorted(out)
         return {name: out[name] for name in names}
+
+    async def _bulk_delete(self, pathlist, **kwargs):
+        """
+        Remove multiple keys with one call
+
+        Parameters
+        ----------
+        pathlist : list(str)
+            The keys to remove, must all be in the same bucket.
+            Must have 0 < len <= 1000
+        """
+        if not pathlist:
+            return
+        bucket, key_list = self._get_batch_delete_key_list(pathlist)
+        await self._call_oss("batch_delete_objects", key_list, bucket=bucket)
+
+    async def _rm_file(self, path: str, **kwargs):
+        bucket, key = self.split_path(path)
+        await self._call_oss("delete_object", bucket=bucket, key=key)
+        self.invalidate_cache(self._parent(path))
+
+    async def _rm(self, path, recursive=False, batch_size=1000, **kwargs):
+        if isinstance(path, list):
+            for file in path:
+                await self._rm(file)
+            return
+
+        paths = await self._expand_path(path, recursive=recursive)
+        await _run_coros_in_chunks(
+            [
+                self._bulk_delete(paths[i : i + batch_size])
+                for i in range(0, len(paths), batch_size)
+            ],
+            batch_size=3,
+            nofiles=True,
+        )
+
+    async def _checksum(self, path, refresh=True):
+        """
+        Unique value for current version of file
+
+        If the checksum is the same from one moment to another, the contents
+        are guaranteed to be the same. If the checksum changes, the contents
+        *might* have changed.
+
+        Parameters
+        ----------
+        path : string/bytes
+            path of file to get checksum for
+        refresh : bool (=False)
+            if False, look in local cache for file details first
+
+        """
+        return sha256(
+            (
+                str(await self._ukey(path))
+                + str(await self._info(path, refresh=refresh))
+            ).encode()
+        ).hexdigest()
+
+    checksum = sync_wrapper(_checksum)
+
+    async def _ukey(self, path: str):
+        """Hash of file properties, to tell if it has changed"""
+        bucket_name, obj_name = self.split_path(path)
+        obj_stream = await self._call_oss("get_object", obj_name, bucket=bucket_name)
+        return obj_stream.server_crc
+
+    checksum = sync_wrapper(_checksum)

@@ -4,7 +4,7 @@ Code of base class of OSSFileSystem
 import logging
 import os
 import re
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Set, Tuple
 
 from fsspec.spec import AbstractFileSystem
 from fsspec.utils import stringify_path
@@ -209,3 +209,19 @@ class BaseOSSFileSystem(AbstractFileSystem):
                 "'withdirs'/'maxdepth' options."
             )
         return path
+
+    def _get_batch_delete_key_list(self, pathlist: List[str]) -> Tuple[str, List[str]]:
+        buckets: Set[str] = set()
+        key_list: List[str] = []
+        for path in pathlist:
+            bucket, key = self.split_path(path)
+            buckets.add(bucket)
+            key_list.append(key)
+        if len(buckets) > 1:
+            raise ValueError("Bulk delete files should refer to only one bucket")
+        bucket = buckets.pop()
+        if len(pathlist) > 1000:
+            raise ValueError("Max number of files to delete in one call is 1000")
+        for path in pathlist:
+            self.invalidate_cache(self._parent(path))
+        return bucket, key_list

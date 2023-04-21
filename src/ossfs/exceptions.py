@@ -10,6 +10,7 @@ from oss2.exceptions import OssError
 ERROR_CODE_TO_EXCEPTION = {
     "NoSuchBucket": FileNotFoundError,
     "NoSuchKey": FileNotFoundError,
+    "NotFound": FileNotFoundError,
     "AccessDenied": PermissionError,
 }
 
@@ -38,8 +39,7 @@ def translate_oss_error(error: OssError, *args, message=None, set_cause=True, **
     if not isinstance(error, OssError):
         # not a oss error:
         return error
-    code = error.code
-    print("error code", code)
+    code = error.__class__.__name__
     constructor = ERROR_CODE_TO_EXCEPTION.get(code)
     if constructor:
         if not message:
