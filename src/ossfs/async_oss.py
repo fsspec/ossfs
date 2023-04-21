@@ -2,6 +2,7 @@
 Code of AioOSSFileSystem
 """
 import logging
+import os
 import weakref
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
@@ -12,8 +13,8 @@ from fsspec.asyn import AsyncFileSystem, sync
 from fsspec.exceptions import FSTimeoutError
 from oss2.exceptions import AccessDenied, ClientError, NotFound
 
-from .base import DEFAULT_POOL_SIZE, BaseOSSFileSystem
-from .utils import async_pretify_info_result
+from .base import DEFAULT_POOL_SIZE, SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
+from .utils import as_progress_handler, async_pretify_info_result
 
 if TYPE_CHECKING:
     from oss2.models import (
@@ -351,3 +352,58 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             return bool(await self._ls_dir(norm_path))
         except FileNotFoundError:
             return False
+
+    async def _put_file(self, lpath: str, rpath: str, **kwargs):
+        bucket, key = self.split_path(rpath)
+        if os.path.isdir(lpath):
+            if key:
+                # don't make remote "directory"
+                return
+            await self._mkdir(lpath)
+        else:
+            callback = as_progress_handler(kwargs.get("callback", None))
+            if os.path.getsize(lpath) >= SIMPLE_TRANSFER_THRESHOLD:
+                await self._call_oss(
+                    "resumable_upload",
+                    bucket=bucket,
+                    key=key,
+                    filename=lpath,
+                    progress_callback=callback,
+                )
+            else:
+                await self._call_oss(
+                    "put_object_from_file",
+                    bucket=bucket,
+                    key=key,
+                    filename=lpath,
+                    progress_callback=callback,
+                )
+
+        self.invalidate_cache(self._parent(rpath))
+
+    async def _get_file(self, rpath: str, lpath: str, **kwargs):
+        """
+        Copy single remote file to local
+        """
+        bucket, key = self.split_path(rpath)
+        if await self._isdir(rpath):
+            # don't make local "directory"
+            return
+        callback = as_progress_handler(kwargs.get("callback", None))
+        if await self._size(rpath) >= SIMPLE_TRANSFER_THRESHOLD:
+            await self._call_oss(
+                "resumable_download",
+                bucket=bucket,
+                key=key,
+                filename=lpath,
+                progress_callback=callback,
+            )
+        else:
+            await self._call_oss(
+                "get_object_to_file",
+                bucket=bucket,
+                key=key,
+                filename=lpath,
+                progress_callback=callback,
+                **kwargs,
+            )
