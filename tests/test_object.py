@@ -197,7 +197,10 @@ def test_ossfs_file_access(ossfs: "OSSFileSystem", number_file: str):
     assert ossfs.info(number_file)["Size"] == len(NUMBERS)
 
 
-def test_du(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_du(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     file1 = path + "file1"
@@ -239,10 +242,13 @@ def test_ossfs_big_ls(
     for num in range(120):
         bucket.put_object(bucket_relative_path(f"{path}{num}.part"), "foo")
 
-    assert len(ossfs.find(path, connect_timeout=600)) == 120
+    assert len(ossfs.ls(path, detail=False, connect_timeout=600)) == 120
 
 
-def test_ossfs_glob(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_ossfs_glob(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     file1 = path + "nested/file.dat"
@@ -432,8 +438,9 @@ def test_modified(
         ossfs.modified(path=test_bucket_name)
 
 
-def test_get_file_info_with_selector(
-    ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_find_file_info_with_selector(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -508,7 +515,10 @@ def test_leading_forward_slash(
     assert ossfs.exists("/" + path + "some/file")
 
 
-def test_find_with_prefix(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_find_with_prefix(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     if not ossfs.exists(path):
