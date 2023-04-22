@@ -14,7 +14,6 @@ from oss2.auth import AnonymousAuth
 
 from .base import SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
 from .exceptions import translate_oss_error
-from .file import OSSFile
 from .utils import as_progress_handler, pretify_info_result
 
 if TYPE_CHECKING:
@@ -100,43 +99,6 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 error = err
                 break
         raise translate_oss_error(error) from error
-
-    def _open(
-        self,
-        path: str,
-        mode: str = "rb",
-        block_size: Optional[int] = None,
-        autocommit: bool = True,
-        cache_options: Optional[str] = None,
-        **kwargs,  # pylint: disable=too-many-arguments
-    ) -> "OSSFile":
-        """
-        Open a file for reading or writing.
-        Parameters
-        ----------
-        path: str
-            File location
-        mode: str
-            'rb', 'wb', etc.
-        autocommit: bool
-            If False, writes to temporary file that only gets put in final
-            location upon commit
-        kwargs
-        Returns
-        -------
-        OSSFile instance
-        """
-        cache_type = kwargs.pop("cache_type", self._default_cache_type)
-        return OSSFile(
-            self,
-            path,
-            mode,
-            block_size,
-            autocommit,
-            cache_options=cache_options,
-            cache_type=cache_type,
-            **kwargs,
-        )
 
     def _ls_bucket(self, connect_timeout: Optional[int]) -> List[Dict[str, Any]]:
         if "" not in self.dircache:
