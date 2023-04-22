@@ -10,12 +10,13 @@ import os
 import pickle
 import time
 from multiprocessing.pool import ThreadPool
-from typing import Dict
+from typing import Dict, Union
 
 import fsspec.core
 import pytest
 
-from ossfs import OSSFileSystem
+from ossfs import AioOSSFileSystem, OSSFileSystem
+from ossfs.base import BaseOSSFileSystem
 
 
 @pytest.fixture(scope="module", name="test_path")
@@ -24,14 +25,20 @@ def file_level_path(test_bucket_name: str, test_directory: str):
     return f"/{test_bucket_name}/{test_directory}/{file_name}"
 
 
+@pytest.mark.parametrize("aio", [False, True])
 @pytest.mark.parametrize("default_cache_type", ["none", "bytes", "readahead"])
-def test_default_cache_type(init_config: Dict, default_cache_type: str, test_path: str):
+def test_default_cache_type(
+    init_config: Dict, default_cache_type: str, test_path: str, aio: bool
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     data = b"a" * (10 * 2**20)
     file = path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
-    ossfs = OSSFileSystem(**init_config)
+    if aio:
+        ossfs = AioOSSFileSystem(**init_config)
+    else:
+        ossfs = OSSFileSystem(**init_config)
     with ossfs.open(file, "wb") as f:
         f.write(data)
 
@@ -42,8 +49,11 @@ def test_default_cache_type(init_config: Dict, default_cache_type: str, test_pat
         assert out == data
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 @pytest.mark.parametrize("cache_type", ["none", "bytes", "readahead"])
-def test_cache_type(ossfs: "OSSFileSystem", cache_type: str, test_path: str):
+def test_cache_type(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], cache_type: str, test_path: str
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     data = b"a" * (10 * 2**20)
@@ -59,7 +69,8 @@ def test_cache_type(ossfs: "OSSFileSystem", cache_type: str, test_path: str):
         assert out == data
 
 
-def test_current(ossfs: "OSSFileSystem", init_config: Dict):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_current(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], init_config: Dict):
     ossfs._cache.clear()  # pylint: disable=protected-access
     ossfs = OSSFileSystem(**init_config)
     assert ossfs.current() is ossfs
@@ -81,7 +92,8 @@ def test_connect_many(init_config: Dict, test_bucket_name: str):
     pool.join()
 
 
-def test_pickle(ossfs: "OSSFileSystem", test_path: str):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_pickle(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     for number in range(10):
@@ -98,6 +110,6 @@ def test_strip_protocol():
     Test protocols
     """
     address = "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-    assert OSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
+    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
     address = "oss://mybucket/myobject"
-    assert OSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
+    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"

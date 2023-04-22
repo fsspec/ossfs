@@ -13,8 +13,14 @@ from aiooss2.http import AioSession
 from fsspec.asyn import AsyncFileSystem, _run_coros_in_chunks, sync, sync_wrapper
 from fsspec.exceptions import FSTimeoutError
 from oss2.exceptions import ClientError, OssError, RequestError
+from oss2.models import PartInfo
 
-from .base import DEFAULT_POOL_SIZE, SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
+from .base import (
+    DEFAULT_BLOCK_SIZE,
+    DEFAULT_POOL_SIZE,
+    SIMPLE_TRANSFER_THRESHOLD,
+    BaseOSSFileSystem,
+)
 from .exceptions import translate_oss_error
 from .utils import as_progress_handler, async_pretify_info_result
 
@@ -23,7 +29,9 @@ if TYPE_CHECKING:
     from oss2.models import (
         AppendObjectResult,
         HeadObjectResult,
+        InitMultipartUploadResult,
         ListBucketsResult,
+        PutObjectResult,
         SimplifiedBucketInfo,
         SimplifiedObjectInfo,
     )
@@ -270,6 +278,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             result = {"name": path, "size": 0, "type": "directory"}
             return result
         bucket, key = self.split_path(norm_path)
+        self._get_bucket(bucket)
         refresh = kwargs.pop("refresh", False)
         if not refresh:
             out = self._ls_from_cache(norm_path)
@@ -600,3 +609,42 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         return results
 
     get_object = sync_wrapper(_get_object)
+
+    async def _pipe_file(self, path: str, value: Union[str, bytes], **kwargs):
+        bucket, key = self.split_path(path)
+        self.invalidate_cache(path)
+        block_size = kwargs.get("block_size", DEFAULT_BLOCK_SIZE)
+        # 5 GB is the limit for an OSS PUT
+        if len(value) < min(5 * 2**30, 2 * block_size):
+            await self._call_oss("put_object", key, value, bucket=bucket, **kwargs)
+            return
+        init_multi_part_upload_result: "InitMultipartUploadResult" = (
+            await self._call_oss("init_multipart_upload", key, bucket=bucket, **kwargs)
+        )
+        parts: List["PartInfo"] = []
+        for i, off in enumerate(range(0, len(value), block_size)):
+            part_number = i + 1
+            value_block = value[off : off + block_size]
+            put_object_result: "PutObjectResult" = await self._call_oss(
+                "upload_part",
+                key,
+                init_multi_part_upload_result.upload_id,
+                part_number,
+                value_block,
+                bucket=bucket,
+            )
+            parts.append(
+                PartInfo(
+                    part_number,
+                    put_object_result.etag,
+                    size=len(value_block),
+                    part_crc=put_object_result.crc,
+                )
+            )
+        await self._call_oss(
+            "complete_multipart_upload",
+            key,
+            init_multi_part_upload_result.upload_id,
+            parts,
+            bucket=bucket,
+        )

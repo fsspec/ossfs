@@ -64,7 +64,6 @@ def pretify_info_result(func):
             detail = kwargs.get("detail", func_params["detail"].default)
         else:
             detail = kwargs.get("detail", True)
-        print(func, detail, func_params)
 
         result = func(ossfs, path, *args, **kwargs)
         return _format_unify(path, result, detail)

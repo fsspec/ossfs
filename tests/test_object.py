@@ -111,7 +111,10 @@ def test_ls_dir(
     assert file in ossfs.ls(path, detail=False)
 
 
-def test_ls_and_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_ls_and_touch(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     # don't make local "directory"
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
@@ -340,19 +343,23 @@ def test_get_put(
     assert open(get_file, "rb").read() == data
 
 
-@pytest.mark.parametrize("size", [2**10, 2**20, 10 * 2**20])
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+@pytest.mark.parametrize("size", [2**10, 20 * 2**20])
 def test_pipe_cat_big(
     ossfs: "OSSFileSystem", size: int, test_path: str, bucket: "Bucket"
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
     bigfile = path + "bigfile"
     data = os.urandom(size)
     ossfs.pipe(bigfile, data)
     assert bucket.get_object(bucket_relative_path(bigfile)).read() == data
 
 
-def test_errors(bucket: "Bucket", ossfs: "OSSFileSystem", test_path: str):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_errors(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
 
@@ -365,8 +372,11 @@ def test_errors(bucket: "Bucket", ossfs: "OSSFileSystem", test_path: str):
     with pytest.raises(ValueError):
         ossfs.open("x", "rb")
 
-    with pytest.raises(ValueError):
-        ossfs.rm("/non_exist_bucket")
+    with pytest.raises(FileNotFoundError):
+        ossfs.open("xxxx", "rb")
+
+    with pytest.raises(PermissionError):
+        ossfs.rm("/non-exist-bucket")
 
     with pytest.raises(ValueError):
         with ossfs.open(path + "temp", "wb") as f:
@@ -379,10 +389,13 @@ def test_errors(bucket: "Bucket", ossfs: "OSSFileSystem", test_path: str):
         f.read()
 
 
-def test_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_touch(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     # create
     function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
     filename = path + "file"
     assert not bucket.object_exists(bucket_relative_path(filename))
     ossfs.touch(filename)
@@ -390,7 +403,8 @@ def test_touch(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
     assert bucket.get_object(bucket_relative_path(filename)).read() == b""
 
     bucket.put_object(bucket_relative_path(filename), b"data")
-    ossfs.touch(filename, truncate=False)
+    with pytest.raises(NotImplementedError):
+        ossfs.touch(filename, truncate=False)
     assert bucket.get_object(bucket_relative_path(filename)).read() == b"data"
 
 

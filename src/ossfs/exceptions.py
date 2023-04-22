@@ -15,7 +15,9 @@ ERROR_CODE_TO_EXCEPTION = {
 }
 
 
-def translate_oss_error(error: OssError, *args, message=None, set_cause=True, **kwargs):
+def translate_oss_error(
+    error: OssError, *args, message=None, set_cause=True, **kwargs
+) -> BaseException:
     """Convert a ClientError exception into a Python one.
     Parameters
     ----------
