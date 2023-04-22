@@ -4,6 +4,7 @@ Code of AioOSSFileSystem
 import logging
 import os
 import weakref
+from datetime import datetime
 from hashlib import sha256
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
@@ -648,3 +649,38 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             parts,
             bucket=bucket,
         )
+
+    async def _cat_file(self, path: str, start=None, end=None, **kwargs):
+        bucket, key = self.split_path(path)
+        object_stream: "AioGetObjectResult" = await self._call_oss(
+            "get_object",
+            bucket=bucket,
+            key=key,
+            byte_range=(start, end),
+            **kwargs,
+        )
+
+        results = b""
+        while True:
+            result = await object_stream.read()
+            if not result:
+                break
+            results += result
+        return results
+
+    async def _modified(self, path: str):
+        """Return the modified timestamp of a file as a datetime.datetime"""
+        bucket_name, obj_name = self.split_path(path)
+        if not obj_name or await self._isdir(path):
+            raise NotImplementedError("bucket has no modified timestamp")
+        object_meta = await self._call_oss(
+            "get_object_meta", obj_name, bucket=bucket_name
+        )
+        return int(
+            datetime.strptime(
+                object_meta.headers["Last-Modified"],
+                "%a, %d %b %Y %H:%M:%S %Z",
+            ).timestamp()
+        )
+
+    modified = sync_wrapper(_modified)

@@ -19,6 +19,7 @@ from .utils import as_progress_handler, pretify_info_result
 
 if TYPE_CHECKING:
     from oss2.models import (
+        GetObjectResult,
         InitMultipartUploadResult,
         PutObjectResult,
         SimplifiedObjectInfo,
@@ -561,3 +562,15 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         if "CreateTime" in result:
             del result["CreateTime"]
         return result
+
+    def cat_file(self, path: str, start: int = None, end: int = None, **kwargs):
+        bucket, object_name = self.split_path(path)
+        object_stream: "GetObjectResult" = self._call_oss(
+            "get_object",
+            bucket=bucket,
+            key=object_name,
+            byte_range=(start, end),
+            **kwargs,
+        )
+
+        return object_stream.read()
