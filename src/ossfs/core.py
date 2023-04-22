@@ -11,13 +11,18 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import oss2
 from oss2.auth import AnonymousAuth
+from oss2.models import PartInfo
 
-from .base import SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
+from .base import DEFAULT_BLOCK_SIZE, SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
 from .exceptions import translate_oss_error
 from .utils import as_progress_handler, pretify_info_result
 
 if TYPE_CHECKING:
-    from oss2.models import SimplifiedObjectInfo
+    from oss2.models import (
+        InitMultipartUploadResult,
+        PutObjectResult,
+        SimplifiedObjectInfo,
+    )
 
 
 logger = logging.getLogger("ossfs")
@@ -504,29 +509,45 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
     def sign(self, path: str, expiration: int = 100, **kwargs):
         raise NotImplementedError("Sign is not implemented for this filesystem")
 
-    def touch(self, path: str, truncate: bool = True, **kwargs):
-        """Create empty file, or update timestamp
-
-        Parameters
-        ----------
-        path: str
-            file location
-        truncate: bool
-            If True, always set file size to 0; if False, update timestamp and
-            leave file unchanged, if backend allows this
-        """
-        if truncate or not self.exists(path):
-            with self.open(path, "wb", **kwargs):
-                pass
-            self.invalidate_cache(self._parent(path))
-
     def pipe_file(self, path: str, value: str, **kwargs):
         """Set the bytes of given file"""
-        bucket_name, obj_name = self.split_path(path)
-        self._call_oss("put_object", obj_name, value, bucket=bucket_name, **kwargs)
-        bucket = self._get_bucket(bucket_name)
-        bucket.put_object(obj_name, value, **kwargs)
-        self.invalidate_cache(self._parent(path))
+        bucket, key = self.split_path(path)
+        block_size = kwargs.get("block_size", DEFAULT_BLOCK_SIZE)
+        # 5 GB is the limit for an OSS PUT
+        self.invalidate_cache(path)
+        if len(value) < min(5 * 2**30, 2 * block_size):
+            self._call_oss("put_object", key, value, bucket=bucket, **kwargs)
+            return
+        mpu: "InitMultipartUploadResult" = self._call_oss(
+            "init_multipart_upload", key, bucket=bucket, **kwargs
+        )
+        parts: List["PartInfo"] = []
+        for i, off in enumerate(range(0, len(value), block_size)):
+            data = value[off : off + block_size]
+            part_number = i + 1
+            out: "PutObjectResult" = self._call_oss(
+                "upload_part",
+                key,
+                mpu.upload_id,
+                part_number,
+                data,
+                bucket=bucket,
+            )
+            parts.append(
+                PartInfo(
+                    part_number,
+                    out.etag,
+                    size=len(data),
+                    part_crc=out.crc,
+                )
+            )
+        self._call_oss(
+            "complete_multipart_upload",
+            key,
+            mpu.upload_id,
+            parts,
+            bucket=bucket,
+        )
 
     @pretify_info_result
     def info(self, path, **kwargs):

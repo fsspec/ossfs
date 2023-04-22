@@ -264,3 +264,21 @@ class BaseOSSFileSystem(AbstractFileSystem):
             cache_type=cache_type,
             **kwargs,
         )
+
+    def touch(self, path: str, truncate: bool = True, **kwargs):
+        """Create empty file, or update timestamp
+
+        Parameters
+        ----------
+        path: str
+            file location
+        truncate: bool
+            If True, always set file size to 0; if False, update timestamp and
+            leave file unchanged, if backend allows this
+        """
+        if truncate or not self.exists(path):
+            self.invalidate_cache(self._parent(path))
+            with self.open(path, "wb", **kwargs):
+                pass
+        else:
+            raise NotImplementedError

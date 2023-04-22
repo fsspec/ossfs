@@ -84,6 +84,10 @@ def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch, aio: bo
     ossfs.ls(test_bucket_name)
 
 
-def test_anonymous_login(file_in_anonymous: str, endpoint: str):
-    ossfs = OSSFileSystem(endpoint=endpoint)
+@pytest.mark.parametrize("aio", [False, True])
+def test_anonymous_login(file_in_anonymous: str, endpoint: str, aio: bool):
+    if aio:
+        ossfs = AioOSSFileSystem(endpoint=endpoint)
+    else:
+        ossfs = OSSFileSystem(endpoint=endpoint)
     ossfs.get_object(file_in_anonymous, 1, 100)
