@@ -11,6 +11,8 @@ from fsspec.utils import stringify_path
 from oss2.auth import AnonymousAuth, Auth, StsAuth
 from oss2.defaults import multiget_threshold
 
+from .file import OSSFile
+
 logger = logging.getLogger("ossfs")
 logging.getLogger("oss2").setLevel(logging.CRITICAL)
 logging.getLogger("urllib3").setLevel(logging.WARNING)
@@ -225,3 +227,40 @@ class BaseOSSFileSystem(AbstractFileSystem):
         for path in pathlist:
             self.invalidate_cache(self._parent(path))
         return bucket, key_list
+
+    def _open(
+        self,
+        path: str,
+        mode: str = "rb",
+        block_size: Optional[int] = None,
+        autocommit: bool = True,
+        cache_options: Optional[str] = None,
+        **kwargs,  # pylint: disable=too-many-arguments
+    ) -> "OSSFile":
+        """
+        Open a file for reading or writing.
+        Parameters
+        ----------
+        path: str
+            File location
+        mode: str
+            'rb', 'wb', etc.
+        autocommit: bool
+            If False, writes to temporary file that only gets put in final
+            location upon commit
+        kwargs
+        Returns
+        -------
+        OSSFile instance
+        """
+        cache_type = kwargs.pop("cache_type", self._default_cache_type)
+        return OSSFile(
+            self,
+            path,
+            mode,
+            block_size,
+            autocommit,
+            cache_options=cache_options,
+            cache_type=cache_type,
+            **kwargs,
+        )

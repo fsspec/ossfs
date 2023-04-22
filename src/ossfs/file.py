@@ -2,11 +2,12 @@
 Code of OSSFileSystem and OSSFile
 """
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 from fsspec.spec import AbstractBufferedFile
 
 if TYPE_CHECKING:
+    from .async_oss import AioOSSFileSystem
     from .core import OSSFileSystem
 
 
@@ -18,7 +19,7 @@ logging.getLogger("urllib3").setLevel(logging.WARNING)
 class OSSFile(AbstractBufferedFile):
     """A file living in OSSFileSystem"""
 
-    fs: "OSSFileSystem"
+    fs: Union["OSSFileSystem", "AioOSSFileSystem"]
     loc: int
 
     def _upload_chunk(self, final: bool = False) -> bool:

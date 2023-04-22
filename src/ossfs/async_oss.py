@@ -19,7 +19,9 @@ from .exceptions import translate_oss_error
 from .utils import as_progress_handler, async_pretify_info_result
 
 if TYPE_CHECKING:
+    from aiooss2.models import AioGetObjectResult
     from oss2.models import (
+        AppendObjectResult,
         HeadObjectResult,
         ListBucketsResult,
         SimplifiedBucketInfo,
@@ -305,14 +307,18 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                     delimiter="/",
                     max_keys=100,
                 )
-                async for _ in ls_out:
-                    return {
-                        "size": 0,
-                        "name": path,
-                        "type": "directory",
-                    }
+                try:
+                    async for _ in ls_out:
+                        return {
+                            "size": 0,
+                            "name": path,
+                            "type": "directory",
+                        }
+                except OssError as err:
+                    raise translate_oss_error(err) from err
             except (PermissionError, FileNotFoundError):
                 pass
+
         else:
             for bucket_info in await self._ls_buckets():
                 if bucket_info["name"] == norm_path.rstrip("/"):
@@ -536,8 +542,8 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             reproduce the same multipart upload while copying and preserve
             the generated etag.
         """
-        bucket1, key1 = self.split_path(path1)
         bucket2, key2 = self.split_path(path2)
+        bucket1, key1 = self.split_path(path1)
         self.invalidate_cache(self._parent(path2))
         if bucket1 != bucket2:
             tempdir = "." + self.ukey(path1)
@@ -554,3 +560,43 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 bucket=bucket1,
                 timeout=connect_timeout,
             )
+
+    async def _append_object(self, path: str, location: int, value: bytes) -> int:
+        """
+        Append bytes to the object
+        """
+        bucket, key = self.split_path(path)
+        result: "AppendObjectResult" = await self._call_oss(
+            "append_object",
+            key,
+            location,
+            value,
+            bucket=bucket,
+        )
+        return result.next_position
+
+    append_object = sync_wrapper(_append_object)
+
+    async def _get_object(self, path: str, start: int, end: int) -> bytes:
+        """
+        Return object bytes in range
+        """
+        headers = {"x-oss-range-behavior": "standard"}
+        bucket, key = self.split_path(path)
+        object_stream: "AioGetObjectResult" = await self._call_oss(
+            "get_object",
+            key,
+            bucket=bucket,
+            byte_range=(start, end),
+            headers=headers,
+        )
+        results = b""
+        while True:
+            result = await object_stream.read()
+            if result:
+                results += result
+            else:
+                break
+        return results
+
+    get_object = sync_wrapper(_get_object)
