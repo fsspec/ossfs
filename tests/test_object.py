@@ -201,7 +201,10 @@ def test_bulk_delete(
     assert not bucket.object_exists(bucket_relative_path(nest_file2))
 
 
-def test_ossfs_file_access(ossfs: "OSSFileSystem", number_file: str):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_ossfs_file_access(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], number_file: str
+):
     assert ossfs.cat(number_file) == NUMBERS
     assert ossfs.head(number_file, 3) == NUMBERS[:3]
     assert ossfs.tail(number_file, 3) == NUMBERS[-3:]
@@ -408,7 +411,10 @@ def test_touch(
     assert bucket.get_object(bucket_relative_path(filename)).read() == b"data"
 
 
-def test_cat_missing(ossfs: "OSSFileSystem", test_path: str, bucket: "Bucket"):
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
+def test_cat_missing(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
+):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"
     file1 = path + "file0"
@@ -443,8 +449,12 @@ def test_get_directories(
     assert {"key0", "key1"} == set(os.listdir(os.path.join(d, "dirkey")))
 
 
+@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_modified(
-    ossfs: "OSSFileSystem", test_path: str, test_bucket_name: str, bucket: "Bucket"
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    test_path: str,
+    test_bucket_name: str,
+    bucket: "Bucket",
 ):
     function_name = inspect.stack()[0][0].f_code.co_name
     path = f"{test_path}/{function_name}/"

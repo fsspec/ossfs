@@ -287,9 +287,15 @@ def test_file_status(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_pat
         assert not f.writable()
 
 
+@pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 @pytest.mark.parametrize("data_size", [0, 20, 10 * 2**20])
 @pytest.mark.parametrize("append_size", [0, 20, 10 * 2**20])
-def test_append(ossfs, test_path, data_size, append_size):
+def test_append(
+    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"],
+    test_path: str,
+    data_size: int,
+    append_size: int,
+):
     file = test_path + f"/test_append/file_{data_size}_{append_size}"
     data = os.urandom(data_size)
     extra = os.urandom(append_size)
