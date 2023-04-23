@@ -15,7 +15,7 @@ from oss2.models import PartInfo
 
 from .base import DEFAULT_BLOCK_SIZE, SIMPLE_TRANSFER_THRESHOLD, BaseOSSFileSystem
 from .exceptions import translate_oss_error
-from .utils import as_progress_handler, pretify_info_result
+from .utils import as_progress_handler, prettify_info_result
 
 if TYPE_CHECKING:
     from oss2.models import (
@@ -184,7 +184,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         except oss2.exceptions.AccessDenied:
             return []
 
-    @pretify_info_result
+    @prettify_info_result
     def ls(self, path: str, detail: bool = True, **kwargs):
         connect_timeout = kwargs.pop("connect_timeout", 60)
         norm_path = self._strip_protocol(path).strip("/")
@@ -201,7 +201,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
 
         return files
 
-    @pretify_info_result
+    @prettify_info_result
     def find(
         self,
         path: str,
@@ -550,7 +550,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             bucket=bucket,
         )
 
-    @pretify_info_result
+    @prettify_info_result
     def info(self, path, **kwargs):
         norm_path = self._strip_protocol(path).lstrip("/")
         if norm_path == "":

@@ -23,7 +23,7 @@ from .base import (
     BaseOSSFileSystem,
 )
 from .exceptions import translate_oss_error
-from .utils import as_progress_handler, async_pretify_info_result
+from .utils import as_progress_handler, async_prettify_info_result
 
 if TYPE_CHECKING:
     from aiooss2.models import AioGetObjectResult
@@ -240,7 +240,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             results = self.dircache[""]
         return results
 
-    @async_pretify_info_result
+    @async_prettify_info_result
     async def _ls(self, path: str, detail: bool = True, **kwargs):
         """List files in given bucket, or list of buckets.
 
@@ -272,7 +272,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             files = await self._ls_buckets(refresh)
         return files
 
-    @async_pretify_info_result
+    @async_prettify_info_result
     async def _info(self, path: str, **kwargs):
         norm_path = self._strip_protocol(path).lstrip("/")
         if norm_path == "":
@@ -430,7 +430,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 **kwargs,
             )
 
-    @async_pretify_info_result
+    @async_prettify_info_result
     async def _find(
         self,
         path: str,
