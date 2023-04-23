@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Union
 
 import pytest
 
-from .conftest import LICENSE_PATH, NUMBERS, bucket_relative_path
+from ..conftest import LICENSE_PATH, NUMBERS, bucket_relative_path
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -22,8 +22,8 @@ if TYPE_CHECKING:
 
 @pytest.fixture(scope="module", name="test_path")
 def file_level_path(test_bucket_name: str, test_directory: str):
-    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{file_name}"
+    current_file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
+    return f"/{test_bucket_name}/{test_directory}/{current_file_name}"
 
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
