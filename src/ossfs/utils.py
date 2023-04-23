@@ -49,7 +49,7 @@ def _format_unify(path: str, result, detail: bool):
     return _copy_and_pretify_list(path, result, detail)
 
 
-def pretify_info_result(func):
+def prettify_info_result(func):
     """Make the return values of `ls` and `info` follows the fsspec's standard
     Examples:
     --------------------------------
@@ -71,7 +71,7 @@ def pretify_info_result(func):
     return wrapper
 
 
-def async_pretify_info_result(func):
+def async_prettify_info_result(func):
     """Make the return values of async func `ls` and `info` follows the
     fsspec's standard
     Examples:
