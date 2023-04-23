@@ -20,10 +20,10 @@ def tests(session: nox.Session) -> None:
     session.install(".[tests]")
     session.run(
         "pytest",
+        "tests/func",
         "--cov",
         "--cov-config=pyproject.toml",
-        "--durations",
-        "100",
+        "--durations=100",
         *session.posargs,
         env={"COVERAGE_FILE": f".coverage.{session.python}"},
     )

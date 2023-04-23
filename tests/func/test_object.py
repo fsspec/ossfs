@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Union
 import fsspec
 import pytest
 
-from .conftest import NUMBERS, bucket_relative_path
+from ..conftest import NUMBERS, bucket_relative_path
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture(scope="module", name="test_path")
-def file_level_path(test_bucket_name: str, test_directory: str):
+def file_name_path(test_bucket_name: str, test_directory: str):
     current_file = __file__.rsplit(os.sep, maxsplit=1)[-1]
     return f"/{test_bucket_name}/{test_directory}/{current_file}"
 
@@ -256,7 +256,6 @@ def test_ossfs_big_ls(
     path = f"{test_path}/{function_name}/"
     for num in range(120):
         bucket.put_object(bucket_relative_path(f"{path}{num}.part"), "foo")
-
     assert len(ossfs.ls(path, detail=False, connect_timeout=600)) == 120
 
 
