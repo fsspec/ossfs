@@ -52,7 +52,7 @@ Up-to-date package also provided through conda-forge distribution:
 Quick Start
 ------------
 
-Here is a simple example of locating and reading a object in OSS.
+Here is a simple example of locating and reading an object in OSS.
 
 .. code:: python
 
