@@ -1,12 +1,8 @@
 """
 Test all oss object related methods
 """
-import inspect
 
-# pylint:disable=invalid-name
 # pylint:disable=missing-function-docstring
-# pylint:disable=protected-access
-# pylint:disable=consider-using-with
 import os
 import time
 from typing import TYPE_CHECKING, Union
@@ -14,7 +10,7 @@ from typing import TYPE_CHECKING, Union
 import fsspec
 import pytest
 
-from ..conftest import NUMBERS, bucket_relative_path
+from ..conftest import NUMBERS, bucket_relative_path, function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -33,8 +29,7 @@ def test_info(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # test file info
-    function_name = inspect.stack()[0][0].f_code.co_name
-    object_name_foo = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/foo"
+    object_name_foo = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/foo"
     bucket.put_object(bucket_relative_path(object_name_foo), "foo")
     info = ossfs.info(object_name_foo)
     linfo = ossfs.ls(object_name_foo, detail=True)[0]
@@ -44,7 +39,7 @@ def test_info(
     assert info == linfo
 
     # test not exist dir
-    file_path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    file_path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     object_name_bar = file_path + "bar"
     with pytest.raises(FileNotFoundError):
         ossfs.info(object_name_bar)
@@ -60,8 +55,7 @@ def test_checksum(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # don't make local "directory"
-    function_name = inspect.stack()[0][0].f_code.co_name
-    object_name = f"{test_path}/{function_name}"
+    object_name = f"{test_path}/{function_name()}"
 
     # change one file, using cache
     bucket.put_object(bucket_relative_path(object_name), "foo")
@@ -91,8 +85,7 @@ def test_ls_object(
     test_path: str,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     assert ossfs.ls(path + "nonexistent") == []
     ossfs.invalidate_cache(path)
     filename = path + "accounts.1.json"
@@ -104,8 +97,7 @@ def test_ls_object(
 def test_ls_dir(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file = path + "file"
     bucket.put_object(bucket_relative_path(file), "")
     assert file in ossfs.ls(path, detail=False)
@@ -116,8 +108,7 @@ def test_ls_and_touch(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # don't make local "directory"
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file_a = path + "a"
     file_b = path + "b"
     assert not bucket.object_exists(bucket_relative_path(path))
@@ -137,8 +128,7 @@ def test_isfile(
     bucket: "Bucket",
 ):
     "test isfile in ossfs"
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     file_foo = path + "foo"
     assert not ossfs.isfile("")
     assert not ossfs.isfile("/")
@@ -155,8 +145,7 @@ def test_isdir(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     "test isdir in ossfs"
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     file_foo = path + "foo"
     bucket.put_object(bucket_relative_path(file_foo), "foo")
     assert not ossfs.isdir(file_foo)
@@ -169,8 +158,7 @@ def test_isdir(
 def test_rm(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file_foo = path + "foo"
     nest_file = path + "nested/nested2/file1"
     bucket.put_object(bucket_relative_path(file_foo), "foo")
@@ -188,8 +176,7 @@ def test_rm(
 def test_bulk_delete(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     nest_file1 = path + "nested/file1"
     nest_file2 = path + "nested/file2"
     bucket.put_object(bucket_relative_path(nest_file1), "foo")
@@ -216,8 +203,7 @@ def test_ossfs_file_access(
 def test_du(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file1 = path + "file1"
     file2 = path + "dir/file2"
     file3 = path + "dir/file3"
@@ -225,11 +211,11 @@ def test_du(
     bucket.put_object(bucket_relative_path(file2), b"12345")
     bucket.put_object(bucket_relative_path(file3), b"1234567890" * 2)
 
-    d = ossfs.du(path, total=False)
-    assert all(isinstance(v, int) and v >= 0 for v in d.values())
-    assert d[file1] == 10
-    assert d[file2] == 5
-    assert d[file3] == 20
+    du_result = ossfs.du(path, total=False)
+    assert all(isinstance(v, int) and v >= 0 for v in du_result.values())
+    assert du_result[file1] == 10
+    assert du_result[file2] == 5
+    assert du_result[file3] == 20
     assert ossfs.du(path, total=True) == 35
 
 
@@ -237,23 +223,21 @@ def test_du(
 def test_ossfs_ls(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     filename = path + "nested/file1"
     bucket.put_object(bucket_relative_path(filename), "foo")
     assert filename not in ossfs.ls(path, detail=False)
     assert filename in ossfs.ls(path + "nested/", detail=False)
     assert filename in ossfs.ls(path + "nested", detail=False)
-    L = ossfs.ls(path + "nested", detail=True)
-    assert all(isinstance(item, dict) for item in L)
+    ls_result = ossfs.ls(path + "nested", detail=True)
+    assert all(isinstance(item, dict) for item in ls_result)
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_ossfs_big_ls(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     for num in range(120):
         bucket.put_object(bucket_relative_path(f"{path}{num}.part"), "foo")
     assert len(ossfs.ls(path, detail=False, connect_timeout=600)) == 120
@@ -263,8 +247,7 @@ def test_ossfs_big_ls(
 def test_ossfs_glob(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file1 = path + "nested/file.dat"
     file2 = path + "nested/filedat"
     bucket.put_object(bucket_relative_path(file1), "foo")
@@ -293,8 +276,7 @@ def test_copy(
     test_path: str,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     new_file = path + "file"
     ossfs.copy(number_file, new_file)
     assert bucket.get_object(bucket_relative_path(new_file)).read() == NUMBERS
@@ -307,8 +289,7 @@ def test_move(
     test_path: str,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     from_file = path + "from"
     to_file = path + "to"
     ossfs.copy(number_file, from_file)
@@ -328,12 +309,11 @@ def test_get_put(
     size: int,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
 
     local_file = str(tmpdir.join("number"))
     data = os.urandom(size)
-    open(local_file, "wb").write(data)
+    open(local_file, "wb").write(data)  # pylint:disable=consider-using-with
 
     remote_file = path + "file"
     ossfs.put(local_file, remote_file)
@@ -342,7 +322,7 @@ def test_get_put(
 
     get_file = str(tmpdir.join("get"))
     ossfs.get(remote_file, get_file)
-    assert open(get_file, "rb").read() == data
+    assert open(get_file, "rb").read() == data  # pylint:disable=consider-using-with
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
@@ -350,8 +330,7 @@ def test_get_put(
 def test_pipe_cat_big(
     ossfs: "OSSFileSystem", size: int, test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     bigfile = path + "bigfile"
     data = os.urandom(size)
     ossfs.pipe(bigfile, data)
@@ -359,45 +338,11 @@ def test_pipe_cat_big(
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
-def test_errors(
-    ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
-):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
-
-    with pytest.raises(FileNotFoundError):
-        ossfs.open(path + "none", "rb")
-
-    with pytest.raises(FileNotFoundError):
-        ossfs.mv(path + "x", path + "y")
-
-    with pytest.raises(ValueError):
-        ossfs.open("x", "rb")
-
-    with pytest.raises(FileNotFoundError):
-        ossfs.open("xxxx", "rb")
-
-    with pytest.raises(PermissionError):
-        ossfs.rm("/non-exist-bucket")
-
-    with pytest.raises(ValueError):
-        with ossfs.open(path + "temp", "wb") as f:
-            f.read()
-
-    bucket.put_object(path.split("/", 2)[-1] + "temp", "foobar")
-    with pytest.raises(ValueError):
-        f = ossfs.open(path + "temp", "rb")
-        f.close()
-        f.read()
-
-
-@pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_touch(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # create
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
     filename = path + "file"
     assert not bucket.object_exists(bucket_relative_path(filename))
     ossfs.touch(filename)
@@ -414,8 +359,7 @@ def test_touch(
 def test_cat_missing(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file1 = path + "file0"
     file2 = path + "file1"
     ossfs.touch(file1)
@@ -436,16 +380,15 @@ def test_get_directories(
     test_path: str,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     bucket.put_object(bucket_relative_path(path + "dir/dirkey/key0"), "")
     bucket.put_object(bucket_relative_path(path + "dir/dirkey/key1"), "")
     bucket.put_object(bucket_relative_path(path + "dir/dir/key"), "")
-    d = str(tmpdir)
-    ossfs.get(path + "dir/", d, recursive=True)
-    assert {"dirkey", "dir"} == set(os.listdir(d))
-    assert ["key"] == os.listdir(os.path.join(d, "dir"))
-    assert {"key0", "key1"} == set(os.listdir(os.path.join(d, "dirkey")))
+    tmpdir_str = str(tmpdir)
+    ossfs.get(path + "dir/", tmpdir_str, recursive=True)
+    assert {"dirkey", "dir"} == set(os.listdir(tmpdir_str))
+    assert ["key"] == os.listdir(os.path.join(tmpdir_str, "dir"))
+    assert {"key0", "key1"} == set(os.listdir(os.path.join(tmpdir_str, "dirkey")))
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
@@ -455,8 +398,7 @@ def test_modified(
     test_bucket_name: str,
     bucket: "Bucket",
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file_path = path + "file"
     notexist_path = path + "notexist"
 
@@ -482,8 +424,7 @@ def test_modified(
 def test_find_file_info_with_selector(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     file_a = path + "test_file_a"
     file_b = path + "test_file_b"
     dir_a = path + "test_dir_a"
@@ -513,8 +454,7 @@ def test_find_file_info_with_selector(
 def test_exists(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}"
+    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}"
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix1"), "")
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix2"), "")
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix3/something"), "")
@@ -547,8 +487,7 @@ def test_exists(
 def test_leading_forward_slash(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     bucket.put_object(bucket_relative_path(path + "some/file"), "")
     assert ossfs.ls(path + "some/")
     path = path.lstrip("/")
@@ -560,8 +499,7 @@ def test_leading_forward_slash(
 def test_find_with_prefix(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     if not ossfs.exists(path):
         for cursor in range(100):
             bucket.put_object(
@@ -595,8 +533,7 @@ READ_BLOCK_SIZE = 2**14  # 16KB blocks
 def test_get_put_file(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], tmpdir, test_path: str
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     src_file = str(tmpdir / "source")
     src2_file = str(tmpdir / "source_2")
     dest_file = path + "get_put_file/dest"

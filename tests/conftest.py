@@ -3,6 +3,7 @@ Pytest setup
 """
 # pylint: disable=missing-function-docstring
 # pylint: disable=redefined-outer-name
+import inspect
 import os
 import pathlib
 import subprocess
@@ -28,6 +29,10 @@ test_id = uuid.uuid4()
 
 def bucket_relative_path(path: str) -> str:
     return path.split("/", 2)[2]
+
+
+def function_name():
+    return inspect.stack()[1][0].f_code.co_name
 
 
 @pytest.fixture(scope="session")
