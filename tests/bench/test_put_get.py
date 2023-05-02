@@ -1,30 +1,20 @@
 """
 Test benchmark of get and push
 """
-import inspect
 
-# pylint:disable=invalid-name
 # pylint:disable=missing-function-docstring
 # pylint:disable=protected-access
-# pylint:disable=consider-using-with
 import os
 from typing import TYPE_CHECKING, Union
 
 import pytest
 
-from ..conftest import bucket_relative_path
+from ..conftest import bucket_relative_path, function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
 
     from ossfs import AioOSSFileSystem, OSSFileSystem
-
-
-@pytest.fixture(name="test_path", scope="module")
-def file_name_path(test_bucket_name: str, test_directory: str):
-    """Add current file name to the path name"""
-    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{file_name}"
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
@@ -34,8 +24,7 @@ def test_put_small_files(
     test_path: str,
     benchmark,
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
 
     local_path = tmpdir / "number"
     local_path.mkdir()
@@ -43,7 +32,8 @@ def test_put_small_files(
     for num in range(1200):
         data = os.urandom(1000)
         local_file = local_path / str(num)
-        open(local_file, "wb").write(data)
+        with open(local_file, "wb") as f_w:
+            f_w.write(data)
 
     benchmark.pedantic(
         ossfs.put,
@@ -63,8 +53,7 @@ def test_get_small_files(
     test_path: str,
     benchmark,
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
 
     for num in range(1200):
         data = os.urandom(1000)

@@ -1,14 +1,12 @@
 """
 Test all oss errors
 """
-import inspect
-import os
+# pylint:disable=missing-function-docstring
 from typing import TYPE_CHECKING, Union
 
 import pytest
 
-# pylint:disable=missing-function-docstring
-
+from ..conftest import function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -16,18 +14,11 @@ if TYPE_CHECKING:
     from ossfs import AioOSSFileSystem, OSSFileSystem
 
 
-@pytest.fixture(scope="module", name="test_path")
-def file_level_path(test_bucket_name: str, test_directory: str):
-    current_file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{current_file_name}"
-
-
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_errors(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
 
     with pytest.raises(FileNotFoundError):
         ossfs.open(path + "none", "rb")

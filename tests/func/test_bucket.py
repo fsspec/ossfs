@@ -1,5 +1,4 @@
 """tests for bucket level operations"""
-# pylint:disable = too-many-arguments
 # pylint:disable=missing-function-docstring
 from typing import TYPE_CHECKING, Union
 
