@@ -8,7 +8,7 @@ import os
 import pathlib
 import subprocess
 import uuid
-from typing import Dict, Union
+from typing import Dict, Optional, Union
 
 import oss2
 import pytest
@@ -31,8 +31,12 @@ def bucket_relative_path(path: str) -> str:
     return path.split("/", 2)[2]
 
 
-def function_name():
-    return inspect.stack()[1][0].f_code.co_name
+def function_name(ossfs: Optional[Union["OSSFileSystem", "AioOSSFileSystem"]] = None):
+    file_name = inspect.stack()[1].filename.rsplit(os.sep, maxsplit=1)[-1][:-3]
+    function_name = inspect.stack()[1][0].f_code.co_name
+    if ossfs:
+        function_name += f"_{ossfs.__class__.__name__}"
+    return f"{file_name}/{function_name}"
 
 
 @pytest.fixture(scope="session")
@@ -52,6 +56,11 @@ def test_bucket_name() -> str:
     test_bucket_name = os.environ.get("OSS_TEST_BUCKET_NAME")
     assert test_bucket_name
     return test_bucket_name
+
+
+@pytest.fixture(scope="session", name="test_path")
+def file_level_path(test_bucket_name: str, test_directory: str) -> str:
+    return f"/{test_bucket_name}/{test_directory}"
 
 
 @pytest.fixture(scope="session")

@@ -18,18 +18,12 @@ if TYPE_CHECKING:
     from ossfs import AioOSSFileSystem, OSSFileSystem
 
 
-@pytest.fixture(scope="module", name="test_path")
-def file_name_path(test_bucket_name: str, test_directory: str):
-    current_file = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{current_file}"
-
-
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_info(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # test file info
-    object_name_foo = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/foo"
+    object_name_foo = f"{test_path}/{function_name(ossfs)}/foo"
     bucket.put_object(bucket_relative_path(object_name_foo), "foo")
     info = ossfs.info(object_name_foo)
     linfo = ossfs.ls(object_name_foo, detail=True)[0]
@@ -39,7 +33,7 @@ def test_info(
     assert info == linfo
 
     # test not exist dir
-    file_path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    file_path = f"{test_path}/{function_name(ossfs)}/"
     object_name_bar = file_path + "bar"
     with pytest.raises(FileNotFoundError):
         ossfs.info(object_name_bar)
@@ -55,7 +49,7 @@ def test_checksum(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # don't make local "directory"
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
 
     # change one file, using cache
     bucket.put_object(bucket_relative_path(object_name), "foo")
@@ -85,7 +79,7 @@ def test_ls_object(
     test_path: str,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     assert ossfs.ls(path + "nonexistent") == []
     ossfs.invalidate_cache(path)
     filename = path + "accounts.1.json"
@@ -97,7 +91,7 @@ def test_ls_object(
 def test_ls_dir(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file = path + "file"
     bucket.put_object(bucket_relative_path(file), "")
     assert file in ossfs.ls(path, detail=False)
@@ -108,7 +102,7 @@ def test_ls_and_touch(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # don't make local "directory"
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_a = path + "a"
     file_b = path + "b"
     assert not bucket.object_exists(bucket_relative_path(path))
@@ -128,7 +122,7 @@ def test_isfile(
     bucket: "Bucket",
 ):
     "test isfile in ossfs"
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_foo = path + "foo"
     assert not ossfs.isfile("")
     assert not ossfs.isfile("/")
@@ -145,7 +139,7 @@ def test_isdir(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     "test isdir in ossfs"
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_foo = path + "foo"
     bucket.put_object(bucket_relative_path(file_foo), "foo")
     assert not ossfs.isdir(file_foo)
@@ -158,7 +152,7 @@ def test_isdir(
 def test_rm(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_foo = path + "foo"
     nest_file = path + "nested/nested2/file1"
     bucket.put_object(bucket_relative_path(file_foo), "foo")
@@ -176,7 +170,7 @@ def test_rm(
 def test_bulk_delete(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     nest_file1 = path + "nested/file1"
     nest_file2 = path + "nested/file2"
     bucket.put_object(bucket_relative_path(nest_file1), "foo")
@@ -203,7 +197,7 @@ def test_ossfs_file_access(
 def test_du(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file1 = path + "file1"
     file2 = path + "dir/file2"
     file3 = path + "dir/file3"
@@ -223,7 +217,7 @@ def test_du(
 def test_ossfs_ls(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     filename = path + "nested/file1"
     bucket.put_object(bucket_relative_path(filename), "foo")
     assert filename not in ossfs.ls(path, detail=False)
@@ -237,7 +231,7 @@ def test_ossfs_ls(
 def test_ossfs_big_ls(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     for num in range(120):
         bucket.put_object(bucket_relative_path(f"{path}{num}.part"), "foo")
     assert len(ossfs.ls(path, detail=False, connect_timeout=600)) == 120
@@ -247,7 +241,7 @@ def test_ossfs_big_ls(
 def test_ossfs_glob(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file1 = path + "nested/file.dat"
     file2 = path + "nested/filedat"
     bucket.put_object(bucket_relative_path(file1), "foo")
@@ -276,7 +270,7 @@ def test_copy(
     test_path: str,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     new_file = path + "file"
     ossfs.copy(number_file, new_file)
     assert bucket.get_object(bucket_relative_path(new_file)).read() == NUMBERS
@@ -289,7 +283,7 @@ def test_move(
     test_path: str,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     from_file = path + "from"
     to_file = path + "to"
     ossfs.copy(number_file, from_file)
@@ -309,7 +303,7 @@ def test_get_put(
     size: int,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
 
     local_file = str(tmpdir.join("number"))
     data = os.urandom(size)
@@ -330,7 +324,7 @@ def test_get_put(
 def test_pipe_cat_big(
     ossfs: "OSSFileSystem", size: int, test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     bigfile = path + "bigfile"
     data = os.urandom(size)
     ossfs.pipe(bigfile, data)
@@ -342,7 +336,7 @@ def test_touch(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
     # create
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     filename = path + "file"
     assert not bucket.object_exists(bucket_relative_path(filename))
     ossfs.touch(filename)
@@ -359,7 +353,7 @@ def test_touch(
 def test_cat_missing(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file1 = path + "file0"
     file2 = path + "file1"
     ossfs.touch(file1)
@@ -380,7 +374,7 @@ def test_get_directories(
     test_path: str,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     bucket.put_object(bucket_relative_path(path + "dir/dirkey/key0"), "")
     bucket.put_object(bucket_relative_path(path + "dir/dirkey/key1"), "")
     bucket.put_object(bucket_relative_path(path + "dir/dir/key"), "")
@@ -398,7 +392,7 @@ def test_modified(
     test_bucket_name: str,
     bucket: "Bucket",
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_path = path + "file"
     notexist_path = path + "notexist"
 
@@ -424,7 +418,7 @@ def test_modified(
 def test_find_file_info_with_selector(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     file_a = path + "test_file_a"
     file_b = path + "test_file_b"
     dir_a = path + "test_dir_a"
@@ -454,7 +448,7 @@ def test_find_file_info_with_selector(
 def test_exists(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}"
+    path = f"{test_path}/{function_name(ossfs)}/"
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix1"), "")
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix2"), "")
     bucket.put_object(bucket_relative_path(path + "very/similar/prefix3/something"), "")
@@ -487,7 +481,7 @@ def test_exists(
 def test_leading_forward_slash(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     bucket.put_object(bucket_relative_path(path + "some/file"), "")
     assert ossfs.ls(path + "some/")
     path = path.lstrip("/")
@@ -499,7 +493,7 @@ def test_leading_forward_slash(
 def test_find_with_prefix(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     if not ossfs.exists(path):
         for cursor in range(100):
             bucket.put_object(
@@ -533,7 +527,7 @@ READ_BLOCK_SIZE = 2**14  # 16KB blocks
 def test_get_put_file(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], tmpdir, test_path: str
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     src_file = str(tmpdir / "source")
     src2_file = str(tmpdir / "source_2")
     dest_file = path + "get_put_file/dest"

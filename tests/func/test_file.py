@@ -16,17 +16,11 @@ if TYPE_CHECKING:
     from ossfs import AioOSSFileSystem, OSSFileSystem
 
 
-@pytest.fixture(scope="module", name="test_path")
-def file_level_path(test_bucket_name: str, test_directory: str):
-    current_file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{current_file_name}"
-
-
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_simple_read(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    object_name = f"{test_path}/{function_name()}/{ossfs.__class__.__name__}/"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     data = os.urandom(10 * 2**20)
     bucket.put_object(bucket_relative_path(object_name), data)
 
@@ -40,7 +34,7 @@ def test_simple_read(
 def test_simple_write(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     data = os.urandom(10 * 2**20)
 
     with ossfs.open(object_name, "wb") as f_wb:
@@ -54,7 +48,7 @@ def test_simple_write(
 def test_seek(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     bucket.put_object(bucket_relative_path(object_name), b"123")
 
     with ossfs.open(object_name) as f_seek:
@@ -132,7 +126,7 @@ def test_write(
     size: int,
     bucket: "Bucket",
 ):
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     data = os.urandom(size)
     with ossfs.open(object_name, "wb") as f_wb:
         f_wb.write(data)
@@ -145,7 +139,7 @@ def test_write(
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_write_fails(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     ossfs.touch(object_name)
     with pytest.raises(ValueError):
         ossfs.open(object_name, "rb").write(b"hello")
@@ -161,7 +155,7 @@ def test_write_fails(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_pat
 def test_write_blocks(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str, bucket: "Bucket"
 ):
-    object_name = f"{test_path}/{function_name()}"
+    object_name = f"{test_path}/{function_name(ossfs)}"
     with ossfs.open(object_name, "wb") as f_wb:
         f_wb.write(os.urandom(2 * 2**20))
         assert f_wb.buffer.tell() == 2 * 2**20
@@ -201,7 +195,7 @@ def test_readline(
 def test_readline_empty(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str
 ):
-    file = test_path + f"/{function_name()}/empty"
+    file = f"{test_path}/{function_name(ossfs)}/empty"
     data = b""
     with ossfs.open(file, "wb") as f_wb:
         f_wb.write(data)
@@ -214,7 +208,7 @@ def test_readline_empty(
 def test_readline_blocksize(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str
 ):
-    test_file_a = test_path + f"/{function_name()}/a"
+    test_file_a = f"{test_path}/{function_name(ossfs)}/a"
     data = b"ab\n" + b"a" * (10 * 2**20) + b"\nab"
     with ossfs.open(test_file_a, "wb") as f_wb:
         f_wb.write(data)
@@ -242,7 +236,7 @@ def test_next(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], license_file: s
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_iterable(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
     data = b"abc\n123"
     with ossfs.open(file, "wb") as f_wb:
         f_wb.write(data)
@@ -265,7 +259,7 @@ def test_iterable(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: 
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_file_status(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
     with ossfs.open(file, "wb") as f_wb:
         assert not f_wb.readable()
         assert not f_wb.seekable()
@@ -286,7 +280,7 @@ def test_append(
     data_size: int,
     append_size: int,
 ):
-    file = test_path + f"/{function_name()}/file_{data_size}_{append_size}"
+    file = f"{test_path}/{function_name(ossfs)}/file_{data_size}_{append_size}"
     data = os.urandom(data_size)
     extra = os.urandom(append_size)
     with ossfs.open(file, "wb") as f_wb:
@@ -316,7 +310,7 @@ def test_text_io__stream_wrapper_works(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str
 ):
     """Ensure using TextIOWrapper works."""
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
     with ossfs.open(file, "wb") as f_wb:
         f_wb.write("\u00af\\_(\u30c4)_/\u00af".encode("utf-16-le"))
 
@@ -330,7 +324,7 @@ def test_text_io__basic(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str
 ):
     """Text mode is now allowed."""
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
     with ossfs.open(file, "w", encoding="utf-8") as f_w:
         f_w.write("\u00af\\_(\u30c4)_/\u00af")
 
@@ -343,7 +337,7 @@ def test_text_io__override_encoding(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str
 ):
     """Allow overriding the default text encoding."""
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
 
     with ossfs.open(file, "w", encoding="ibm500") as f_w:
         f_w.write("Hello, World!")
@@ -354,7 +348,7 @@ def test_text_io__override_encoding(
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_readinto(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
 
     with ossfs.open(file, "wb") as f_wb:
         f_wb.write(b"Hello, World!")
@@ -369,7 +363,7 @@ def test_readinto(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: 
 
 @pytest.mark.parametrize("ossfs", ["async", "sync"], indirect=True)
 def test_seek_reads(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    file = test_path + f"/{function_name()}/file"
+    file = f"{test_path}/{function_name(ossfs)}/file"
     with ossfs.open(file, "wb") as f_wb:
         f_wb.write(os.urandom(5627146))
     with ossfs.open(file, "rb", blocksize=100) as f_rb:

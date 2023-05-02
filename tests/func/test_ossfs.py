@@ -3,7 +3,6 @@ Test class level functionality.
 """
 
 # pylint:disable=missing-function-docstring
-import os
 import pickle
 import time
 from multiprocessing.pool import ThreadPool
@@ -16,12 +15,6 @@ from ossfs import AioOSSFileSystem, OSSFileSystem
 from ossfs.base import BaseOSSFileSystem
 
 from ..conftest import function_name
-
-
-@pytest.fixture(scope="module", name="test_path")
-def file_level_path(test_bucket_name: str, test_directory: str):
-    file_name = __file__.rsplit(os.sep, maxsplit=1)[-1]
-    return f"/{test_bucket_name}/{test_directory}/{file_name}"
 
 
 @pytest.mark.parametrize("aio", [False, True])
@@ -52,7 +45,7 @@ def test_default_cache_type(
 def test_cache_type(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], cache_type: str, test_path: str
 ):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     data = b"a" * (10 * 2**20)
     file = path + "/test_cache_type/file"
 
@@ -91,7 +84,7 @@ def test_connect_many(init_config: Dict, test_bucket_name: str):
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_pickle(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    path = f"{test_path}/{function_name()}/"
+    path = f"{test_path}/{function_name(ossfs)}/"
     for number in range(10):
         ossfs.touch(path + "file" + str(number))
 
