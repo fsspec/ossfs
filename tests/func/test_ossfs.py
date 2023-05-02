@@ -1,11 +1,8 @@
 """
 Test class level functionality.
 """
-import inspect
 
-# pylint:disable=protected-access
 # pylint:disable=missing-function-docstring
-# pylint:disable=invalid-name
 import os
 import pickle
 import time
@@ -17,6 +14,8 @@ import pytest
 
 from ossfs import AioOSSFileSystem, OSSFileSystem
 from ossfs.base import BaseOSSFileSystem
+
+from ..conftest import function_name
 
 
 @pytest.fixture(scope="module", name="test_path")
@@ -30,8 +29,7 @@ def file_level_path(test_bucket_name: str, test_directory: str):
 def test_default_cache_type(
     init_config: Dict, default_cache_type: str, test_path: str, aio: bool
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     data = b"a" * (10 * 2**20)
     file = path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
@@ -39,12 +37,12 @@ def test_default_cache_type(
         ossfs = AioOSSFileSystem(**init_config)
     else:
         ossfs = OSSFileSystem(**init_config)
-    with ossfs.open(file, "wb") as f:
-        f.write(data)
+    with ossfs.open(file, "wb") as f_wb:
+        f_wb.write(data)
 
-    with ossfs.open(file, "rb") as f:
-        assert isinstance(f.cache, fsspec.core.caches[default_cache_type])
-        out = f.read(len(data))
+    with ossfs.open(file, "rb") as f_rb:
+        assert isinstance(f_rb.cache, fsspec.core.caches[default_cache_type])
+        out = f_rb.read(len(data))
         assert len(data) == len(out)
         assert out == data
 
@@ -54,17 +52,16 @@ def test_default_cache_type(
 def test_cache_type(
     ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], cache_type: str, test_path: str
 ):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     data = b"a" * (10 * 2**20)
     file = path + "/test_cache_type/file"
 
-    with ossfs.open(file, "wb") as f:
-        f.write(data)
+    with ossfs.open(file, "wb") as f_wb:
+        f_wb.write(data)
 
-    with ossfs.open(file, "rb", cache_type=cache_type) as f:
-        assert isinstance(f.cache, fsspec.core.caches[cache_type])
-        out = f.read(len(data))
+    with ossfs.open(file, "rb", cache_type=cache_type) as f_rb:
+        assert isinstance(f_rb.cache, fsspec.core.caches[cache_type])
+        out = f_rb.read(len(data))
         assert len(data) == len(out)
         assert out == data
 
@@ -94,8 +91,7 @@ def test_connect_many(init_config: Dict, test_bucket_name: str):
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_pickle(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], test_path: str):
-    function_name = inspect.stack()[0][0].f_code.co_name
-    path = f"{test_path}/{function_name}/"
+    path = f"{test_path}/{function_name()}/"
     for number in range(10):
         ossfs.touch(path + "file" + str(number))
 
@@ -110,6 +106,12 @@ def test_strip_protocol():
     Test protocols
     """
     address = "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
+    assert (
+        BaseOSSFileSystem._strip_protocol(address)  # pylint: disable=protected-access
+        == "/mybucket/myobject"
+    )
     address = "oss://mybucket/myobject"
-    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
+    assert (
+        BaseOSSFileSystem._strip_protocol(address)  # pylint: disable=protected-access
+        == "/mybucket/myobject"
+    )
