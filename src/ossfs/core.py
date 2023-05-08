@@ -67,7 +67,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 app_name="ossfs",
             )
         except oss2.exceptions.ClientError as err:
-            raise ValueError(bucket_name) from err
+            raise FileNotFoundError(bucket_name) from err
 
     def _call_oss(
         self,
