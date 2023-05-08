@@ -26,7 +26,7 @@ def test_errors(
     with pytest.raises(FileNotFoundError):
         ossfs.mv(path + "x", path + "y")
 
-    with pytest.raises(ValueError):
+    with pytest.raises(FileNotFoundError):
         ossfs.open("x", "rb")
 
     with pytest.raises(FileNotFoundError):

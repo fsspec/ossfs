@@ -100,7 +100,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 app_name="ossfs",
             )
         except ClientError as err:
-            raise ValueError(bucket_name) from err
+            raise FileNotFoundError(bucket_name) from err
 
     async def set_session(self, refresh: bool = False):
         """Establish a connection session object.
@@ -337,7 +337,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                         "name": path,
                         "type": "directory",
                     }
-        raise FileNotFoundError(norm_path)
+        raise FileNotFoundError(path)
 
     def _cache_result_analysis(self, norm_path: str, parent: str) -> bool:
         if norm_path in self.dircache:
