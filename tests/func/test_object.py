@@ -519,7 +519,7 @@ def test_find_with_prefix(
     ]
 
 
-WRITE_BLOCK_SIZE = 2**13  # 8KB blocks
+WRITE_BLOCK_SIZE = 2**14  # 16KB blocks
 READ_BLOCK_SIZE = 2**14  # 16KB blocks
 
 
