@@ -60,6 +60,3 @@ jobs:
 
     - name: Build package
       run: nox -s build
-
-    - name: Build docs
-      run: nox -s docs
