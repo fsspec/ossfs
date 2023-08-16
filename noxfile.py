@@ -9,12 +9,6 @@ nox.options.sessions = "lint", "tests"
 locations = "src", "tests"
 
 
-@nox.session
-def docs(session: nox.Session) -> None:
-    session.install(".[docs]")
-    session.run("mkdocs", "build")
-
-
 @nox.session(python=["3.8", "3.9", "3.10", "3.11", "pypy3.8", "pypy3.9"])
 def tests(session: nox.Session) -> None:
     session.install(".[tests]")
