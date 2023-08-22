@@ -383,7 +383,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
                 return
             await self._mkdir(lpath)
         else:
-            callback = as_progress_handler(kwargs.get("callback", None))
+            callback = as_progress_handler(kwargs.pop("callback", None))
             if os.path.getsize(lpath) >= SIMPLE_TRANSFER_THRESHOLD:
                 await self._call_oss(
                     "resumable_upload",
@@ -411,7 +411,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
         if await self._isdir(rpath):
             # don't make local "directory"
             return
-        callback = as_progress_handler(kwargs.get("callback", None))
+        callback = as_progress_handler(kwargs.pop("callback", None))
         if await self._size(rpath) >= SIMPLE_TRANSFER_THRESHOLD:
             await self._call_oss(
                 "resumable_download",
