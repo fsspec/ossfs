@@ -1,8 +1,8 @@
 """
 Code of AioOSSFileSystem
 """
-import logging
 import inspect
+import logging
 import os
 import weakref
 from datetime import datetime
