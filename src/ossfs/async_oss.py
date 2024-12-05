@@ -2,6 +2,7 @@
 Code of AioOSSFileSystem
 """
 import logging
+import inspect
 import os
 import weakref
 from datetime import datetime
@@ -156,7 +157,7 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             if not method:
                 method = getattr(aiooss2, method_name)
                 logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
-                if method_name =="resumable_upload":
+                if inspect.iscoroutinefunction(method):
                     out = await method(service, *args, **kwargs)
                 else:
                     out = method(service, *args, **kwargs)
