@@ -156,7 +156,10 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             if not method:
                 method = getattr(aiooss2, method_name)
                 logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
-                out = method(service, *args, **kwargs)
+                if method_name =="resumable_upload":
+                    out = await method(service, *args, **kwargs)
+                else:
+                    out = method(service, *args, **kwargs)
             else:
                 logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
                 out = await method(*args, **kwargs)
