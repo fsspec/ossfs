@@ -556,7 +556,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         if norm_path == "":
             result = {"name": path, "size": 0, "type": "directory"}
         else:
-            result = super().info(path, **kwargs)
+            result = super().info(norm_path, **kwargs)
         if "StorageClass" in result:
             del result["StorageClass"]
         if "CreateTime" in result:
