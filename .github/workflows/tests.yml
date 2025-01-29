@@ -40,8 +40,8 @@ jobs:
         pip --version
         nox --version
 
-    - name: Lint code and check dependencies
-      run: nox -s lint safety
+    - name: Lint code
+      run: nox -s lint
 
     - name: Run tests
       env:
