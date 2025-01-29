@@ -1,6 +1,7 @@
 """
 Code of AioOSSFileSystem
 """
+import inspect
 import logging
 import os
 import weakref
@@ -156,7 +157,10 @@ class AioOSSFileSystem(BaseOSSFileSystem, AsyncFileSystem):
             if not method:
                 method = getattr(aiooss2, method_name)
                 logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
-                out = method(service, *args, **kwargs)
+                if inspect.iscoroutinefunction(method):
+                    out = await method(service, *args, **kwargs)
+                else:
+                    out = method(service, *args, **kwargs)
             else:
                 logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
                 out = await method(*args, **kwargs)
