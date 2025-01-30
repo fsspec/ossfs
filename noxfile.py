@@ -27,6 +27,12 @@ def tests(session: nox.Session) -> None:
 
 
 @nox.session
+def bench(session: nox.Session) -> None:
+    session.install(".[tests]")
+    session.run("pytest", "--benchmark-only", "tests/bench")
+
+
+@nox.session
 def lint(session: nox.Session) -> None:
     session.install("pre-commit")
     session.install("-e", ".[dev]")
