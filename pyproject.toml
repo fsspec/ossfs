@@ -19,7 +19,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 requires-python = ">=3.8"
-dependencies = ["aiooss2>=0.2.11", "fsspec>=2023.9.2", "oss2==2.18.4"]
+dependencies = ["aiooss2>=0.2.11", "fsspec>=2023.9.2", "oss2==2.19.1"]
 license = { text = "Apache-2.0" }
 dynamic = ["version"]
 
