@@ -34,7 +34,7 @@ tests = [
     "pytest>=7.2.0,<8",
     "requests>=2.31.0",
 ]
-dev = ["ossfs[tests]", "mypy==0.971"]
+dev = ["ossfs[tests]", "mypy==1.14.1"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -71,7 +71,8 @@ show_error_codes = true
 show_error_context = true
 show_traceback = true
 pretty = true
-check_untyped_defs = false
+check_untyped_defs = true
+warn_unused_configs = true
 # Warnings
 warn_no_return = true
 warn_redundant_casts = true
