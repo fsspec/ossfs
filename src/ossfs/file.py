@@ -31,7 +31,7 @@ class OSSFile(AbstractBufferedFile):
             This is the last block, so should complete file, if
             self.autocommit is True.
         """
-        self.loc = self.fs.append_object(self.path, self.loc, self.buffer.getvalue())
+        self.loc = self.fs.append_object(self.path, self.offset, self.buffer.getvalue())
         return True
 
     def _initiate_upload(self):
