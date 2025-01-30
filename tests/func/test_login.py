@@ -2,8 +2,7 @@
 Three different login test
 Sts, anonymous, accesskey
 """
-# pylint:disable=invalid-name
-# pylint:disable=missing-function-docstring
+
 import json
 import os
 from typing import Union
@@ -50,7 +49,7 @@ def test_access_key_login(
 def test_sts_login(endpoint: str, test_bucket_name: str, aio: bool):
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     kwargs = {"key": key, "secret": secret, "token": token, "endpoint": endpoint}
-    if aio:
+    if aio:  # noqa: SIM108
         ossfs = AioOSSFileSystem(**kwargs)
     else:
         ossfs = OSSFileSystem(**kwargs)
@@ -62,7 +61,7 @@ def test_set_endpoint(endpoint: str, test_bucket_name: str, monkeypatch, aio: bo
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.delenv("OSS_ENDPOINT")
     kwargs = {"key": key, "secret": secret, "token": token, "endpoint": None}
-    if aio:
+    if aio:  # noqa: SIM108
         ossfs = AioOSSFileSystem(**kwargs)
     else:
         ossfs = OSSFileSystem(**kwargs)
@@ -77,7 +76,7 @@ def test_env_endpoint(endpoint: str, test_bucket_name: str, monkeypatch, aio: bo
     key, secret, token = fetch_sts_token(STSAccessKeyId, STSAccessKeySecret, STSArn)
     monkeypatch.setenv("OSS_ENDPOINT", endpoint)
     kwargs = {"key": key, "secret": secret, "token": token, "endpoint": None}
-    if aio:
+    if aio:  # noqa: SIM108
         ossfs = AioOSSFileSystem(**kwargs)
     else:
         ossfs = OSSFileSystem(**kwargs)

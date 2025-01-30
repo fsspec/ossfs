@@ -1,14 +1,14 @@
 """
 Test all OSSFile related methods
 """
-# pylint:disable=missing-function-docstring
+
 import io
 import os
 from typing import TYPE_CHECKING, Union
 
 import pytest
 
-from ..conftest import LICENSE_PATH, NUMBERS, bucket_relative_path, function_name
+from tests.conftest import LICENSE_PATH, NUMBERS, bucket_relative_path, function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -178,14 +178,12 @@ def test_readline(
     number_file: str,
     license_file: str,
 ):
-    with ossfs.open("/".join([number_file]), "rb") as f_rb:
+    with ossfs.open(f"{number_file}", "rb") as f_rb:
         result = f_rb.readline()
         expected = NUMBERS
         assert result == expected
 
-    with ossfs.open("/".join([license_file]), "rb") as f_rb, open(
-        LICENSE_PATH, "rb"
-    ) as f_l:
+    with ossfs.open(f"{license_file}", "rb") as f_rb, open(LICENSE_PATH, "rb") as f_l:
         result = f_rb.readline()
         expected = f_l.readline()
         assert result == expected

@@ -1,6 +1,7 @@
 """
 Code of OSSFileSystem and OSSFile
 """
+
 import logging
 from typing import TYPE_CHECKING, Union
 
@@ -22,7 +23,7 @@ class OSSFile(AbstractBufferedFile):
     fs: Union["OSSFileSystem", "AioOSSFileSystem"]
     loc: int
 
-    def _upload_chunk(self, final: bool = False) -> bool:
+    def _upload_chunk(self, final: bool = False) -> bool:  # noqa: ARG002
         """Write one part of a multi-block file upload
         Parameters
         ==========

@@ -1,6 +1,7 @@
 """
 Code of base class of OSSFileSystem
 """
+
 import logging
 import os
 import re
@@ -27,8 +28,6 @@ SIMPLE_TRANSFER_THRESHOLD = multiget_threshold
 
 
 class BaseOSSFileSystem(AbstractFileSystem):
-    # pylint: disable=abstract-method
-
     """
     base class of the ossfs (ossfs) OSS file system access OSS(Object
     Storage Service) as if it were a file system.
@@ -43,7 +42,7 @@ class BaseOSSFileSystem(AbstractFileSystem):
 
     protocol = "oss"
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         endpoint: Optional[str] = None,
         key: Optional[str] = None,
@@ -51,13 +50,13 @@ class BaseOSSFileSystem(AbstractFileSystem):
         token: Optional[str] = None,
         default_cache_type: str = "readahead",
         default_block_size: Optional[int] = None,
-        **kwargs,  # pylint: disable=too-many-arguments
+        **kwargs,
     ):
         """
         Parameters
         ----------
         endpoint: string (None)
-            Default endpoints of the fs Endpoints are the adderss where OSS
+            Default endpoints of the fs Endpoints are the address where OSS
             locate like: http://oss-cn-hangzhou.aliyuncs.com or
             https://oss-me-east-1.aliyuncs.com, Can be changed after the
             initialization.
@@ -110,7 +109,7 @@ class BaseOSSFileSystem(AbstractFileSystem):
         Reset the endpoint for ossfs
         endpoint : string (None)
             Default endpoints of the fs
-            Endpoints are the adderss where OSS locate
+            Endpoints are the address where OSS locate
             like: http://oss-cn-hangzhou.aliyuncs.com or
         """
         if not endpoint:
@@ -187,7 +186,7 @@ class BaseOSSFileSystem(AbstractFileSystem):
         self, bucket: str, obj: "SimplifiedObjectInfo"
     ) -> Dict:
         data: Dict[str, Any] = {
-            "name": "/".join([bucket, obj.key]),
+            "name": f"{bucket}/{obj.key}",
             "type": "file",
             "size": obj.size,
         }
@@ -235,7 +234,7 @@ class BaseOSSFileSystem(AbstractFileSystem):
         block_size: Optional[int] = None,
         autocommit: bool = True,
         cache_options: Optional[str] = None,
-        **kwargs,  # pylint: disable=too-many-arguments
+        **kwargs,
     ) -> "OSSFile":
         """
         Open a file for reading or writing.

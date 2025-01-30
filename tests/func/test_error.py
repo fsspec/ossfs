@@ -1,12 +1,12 @@
 """
 Test all oss errors
 """
-# pylint:disable=missing-function-docstring
+
 from typing import TYPE_CHECKING, Union
 
 import pytest
 
-from ..conftest import function_name
+from tests.conftest import function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -35,12 +35,11 @@ def test_errors(
     with pytest.raises(PermissionError):
         ossfs.rm("/non-exist-bucket")
 
-    with pytest.raises(ValueError):
-        with ossfs.open(path + "temp", "wb") as file_obj:
-            file_obj.read()
+    with pytest.raises(ValueError), ossfs.open(path + "temp", "wb") as file_obj:
+        file_obj.read()
 
     bucket.put_object(path.split("/", 2)[-1] + "temp", "foobar")
-    with pytest.raises(ValueError):
-        file_obj = ossfs.open(path + "temp", "rb")  # pylint:disable=consider-using-with
+    with pytest.raises(ValueError):  # noqa: PT012
+        file_obj = ossfs.open(path + "temp", "rb")
         file_obj.close()
         file_obj.read()

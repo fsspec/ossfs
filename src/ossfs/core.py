@@ -1,7 +1,7 @@
 """
 Code of OSSFileSystem
 """
-# pylint:disable=missing-function-docstring
+
 import copy
 import logging
 import os
@@ -29,8 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger("ossfs")
 
 
-class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-methods
-    # pylint:disable=no-value-for-parameter
+class OSSFileSystem(BaseOSSFileSystem):
     """
     A pythonic file-systems interface to OSS (Object Storage Service)
 
@@ -97,7 +96,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                     logger.debug("CALL: %s - %s - %s", method.__name__, args, kwargs)
                     out = method(*args, **kwargs)
                 return out
-            except oss2.exceptions.RequestError as err:
+            except oss2.exceptions.RequestError as err:  # noqa: PERF203
                 logger.debug("Retryable error: %s, try %s times", err, count + 1)
                 error = err
             except oss2.exceptions.OssError as err:
@@ -140,7 +139,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         fsspec form of file info
         """
         result = []
-        obj: "SimplifiedObjectInfo"
+        obj: SimplifiedObjectInfo
         for obj in self._call_oss(
             "ObjectIterator",
             prefix=prefix,
@@ -159,7 +158,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         refresh: bool = False,
         prefix: str = "",
         connect_timeout: Optional[int] = None,
-        **kwargs,  # pylint: disable=too-many-arguments
+        **kwargs,
     ) -> List[Dict]:
         norm_path = path.strip("/")
         if norm_path in self.dircache and not refresh and not prefix and delimiter:
@@ -185,7 +184,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             return []
 
     @prettify_info_result
-    def ls(self, path: str, detail: bool = True, **kwargs):
+    def ls(self, path: str, detail: bool = True, **kwargs):  # noqa: ARG002
         connect_timeout = kwargs.pop("connect_timeout", 60)
         norm_path = self._strip_protocol(path).strip("/")
         if norm_path == "":
@@ -207,7 +206,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         path: str,
         maxdepth: Optional[int] = None,
         withdirs: bool = False,
-        detail: bool = False,
+        detail: bool = False,  # noqa: ARG002
         **kwargs,
     ):
         """List all files below path.
@@ -228,7 +227,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         prefix = kwargs.pop("prefix", "")
         path = self._verify_find_arguments(path, maxdepth, withdirs, prefix)
         if prefix:
-            connect_timeout = kwargs.get("connect_timeout", None)
+            connect_timeout = kwargs.get("connect_timeout")
             for info in self._ls_dir(
                 path, delimiter="", prefix=prefix, connect_timeout=connect_timeout
             ):
@@ -270,7 +269,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         if not self._bucket_exist(bucket_name):
             return False
 
-        connect_timeout = kwargs.get("connect_timeout", None)
+        connect_timeout = kwargs.get("connect_timeout")
         if not obj_name:
             return True
 
@@ -401,7 +400,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
 
     def get_file(
         self, rpath: str, lpath: str, callback: Optional[Callable] = None, **kwargs
-    ):  # pylint: disable=arguments-differ
+    ):
         """
         Copy single remote file to local
         """
@@ -426,7 +425,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
 
     def put_file(
         self, lpath: str, rpath: str, callback: Optional[Callable] = None, **kwargs
-    ):  # pylint: disable=arguments-differ
+    ):
         """
         Copy single file to remote
         """
@@ -460,7 +459,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             raise NotImplementedError("OSS has no created timestamp")
         bucket_info = self._call_oss("get_bucket_info", bucket=bucket_name)
         timestamp = bucket_info.creation_date
-        return datetime.fromtimestamp(timestamp)
+        return datetime.fromtimestamp(timestamp)  # noqa: DTZ006
 
     def modified(self, path: str):
         """Return the modified timestamp of a file as a datetime.datetime"""
@@ -469,7 +468,7 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             raise NotImplementedError("bucket has no modified timestamp")
         simplifiedmeta = self._call_oss("get_object_meta", obj_name, bucket=bucket_name)
         return int(
-            datetime.strptime(
+            datetime.strptime(  # noqa: DTZ007
                 simplifiedmeta.headers["Last-Modified"],
                 "%a, %d %b %Y %H:%M:%S %Z",
             ).timestamp()
@@ -503,8 +502,8 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
                 byte_range=(start, end),
                 headers=headers,
             )
-        except oss2.exceptions.ServerError as err:
-            raise err
+        except oss2.exceptions.ServerError:  # noqa: TRY203
+            raise
         return object_stream.read()
 
     def sign(self, path: str, expiration: int = 100, **kwargs):
@@ -519,14 +518,14 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
         if len(value) < min(5 * 2**30, 2 * block_size):
             self._call_oss("put_object", key, value, bucket=bucket, **kwargs)
             return
-        mpu: "InitMultipartUploadResult" = self._call_oss(
+        mpu: InitMultipartUploadResult = self._call_oss(
             "init_multipart_upload", key, bucket=bucket, **kwargs
         )
-        parts: List["PartInfo"] = []
+        parts: List[PartInfo] = []
         for i, off in enumerate(range(0, len(value), block_size)):
             data = value[off : off + block_size]
             part_number = i + 1
-            out: "PutObjectResult" = self._call_oss(
+            out: PutObjectResult = self._call_oss(
                 "upload_part",
                 key,
                 mpu.upload_id,
@@ -563,9 +562,15 @@ class OSSFileSystem(BaseOSSFileSystem):  # pylint:disable=too-many-public-method
             del result["CreateTime"]
         return result
 
-    def cat_file(self, path: str, start: int = None, end: int = None, **kwargs):
+    def cat_file(
+        self,
+        path: str,
+        start: Optional[int] = None,
+        end: Optional[int] = None,
+        **kwargs,
+    ):
         bucket, object_name = self.split_path(path)
-        object_stream: "GetObjectResult" = self._call_oss(
+        object_stream: GetObjectResult = self._call_oss(
             "get_object",
             bucket=bucket,
             key=object_name,

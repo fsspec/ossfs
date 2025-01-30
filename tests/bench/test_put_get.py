@@ -2,14 +2,12 @@
 Test benchmark of get and push
 """
 
-# pylint:disable=missing-function-docstring
-# pylint:disable=protected-access
 import os
 from typing import TYPE_CHECKING, Union
 
 import pytest
 
-from ..conftest import bucket_relative_path, function_name
+from tests.conftest import bucket_relative_path, function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket

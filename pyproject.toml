@@ -2,30 +2,45 @@
 requires = ["setuptools>=48", "setuptools_scm[toml]>=6.3.1"]
 build-backend = "setuptools.build_meta"
 
+[project]
+name = "ossfs"
+description = "fsspec filesystem for OSS"
+readme = "README.rst"
+authors = [{ name = "Yanxiang Gao", email = "gao@iterative.ai" }]
+maintainers = [{ name = "Yanxiang Gao", email = "gao@iterative.ai" }]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+]
+requires-python = ">=3.8"
+dependencies = ["aiooss2>=0.2.7", "fsspec>=2023.9.2", "oss2==2.18.1"]
+license = { text = "Apache-2.0" }
+dynamic = ["version"]
+
+[project.urls]
+Homepage = "https://github.com/fsspec/ossfs"
+
+[project.optional-dependencies]
+tests = [
+    "aliyun-python-sdk-sts==3.1.1",
+    "pytest-cov>=3,<6",
+    "pytest-mock>=3.8.2,<4",
+    "pytest>=7.2.0,<8",
+    "requests>=2.31.0",
+]
+dev = ["ossfs[tests]", "mypy==0.971"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
 [tool.setuptools_scm]
-
-[tool.black]
-line-length = 88
-include = '\.pyi?$'
-exclude = '''
-/(
-    \.eggs
-  | \.git
-  | \.hg
-  | \.mypy_cache
-  | \.tox
-  | \.venv
-  | _build
-  | buck-out
-  | build
-  | dist
-)/
-'''
-
-[tool.isort]
-profile = "black"
-known_first_party = ["ossfs"]
-line_length = 88
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -67,19 +82,21 @@ files = ["src", "tests"]
 module = ["oss2.*", "fsspec.*", "aliyunsdkcore", "aliyunsdksts.*", "requests"]
 ignore_missing_imports = true
 
-[tool.pylint.format]
-max-line-length = 88
-
-[tool.pylint.message_control]
-enable = ["c-extension-no-member", "no-else-return"]
-
-[tool.pylint.variables]
-dummy-variables-rgx = "_+$|(_[a-zA-Z0-9_]*[a-zA-Z0-9]+?$)|dummy|^ignored_|^unused_"
-ignored-argument-names = "_.*|^ignored_|^unused_|args|kwargs"
-
 [tool.codespell]
 ignore-words-list = " "
 
-[tool.bandit]
-exclude_dirs = ["tests"]
-skips = ["B101"]
+[tool.ruff.lint]
+select = [
+    "F", "E", "W", "C90", "I", "N", "UP", "YTT", "ASYNC", "S", "BLE", "B", "A", "C4", "DTZ", "T10",
+    "EXE", "ISC", "ICN", "LOG", "G", "INP", "PIE", "T20", "PYI", "PT", "Q", "RSE", "RET",
+    "SLOT", "SIM", "TID", "TC", "ARG", "PGH", "PLC", "PLE", "PLR", "PLW", "TRY",
+    "FLY", "PERF", "FURB", "RUF",
+]
+ignore = ["D", "FA", "S101", "ANN", "FBT", "PLR2004", "TRY003", "PT011", "SIM117", "TRY300"]
+
+[tool.ruff.lint.flake8-unused-arguments]
+ignore-variadic-names = true
+
+[tool.ruff.lint.per-file-ignores]
+"docs/**" = ["INP001"]
+"tests/**" = ["S", "TRY", "ARG"]

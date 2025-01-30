@@ -1,5 +1,5 @@
 """tests for bucket level operations"""
-# pylint:disable=missing-function-docstring
+
 from typing import TYPE_CHECKING, Union
 
 import pytest
@@ -23,15 +23,15 @@ def test_ls_bucket(
     assert f"/{test_bucket_name}" in bucket_info_dict
     assert f"/{anonymous_bucket_name}" in bucket_info_dict
 
-    auth = ossfs._auth  # pylint:disable=protected-access
+    auth = ossfs._auth
     try:
-        ossfs._auth = AnonymousAuth()  # pylint:disable=protected-access
+        ossfs._auth = AnonymousAuth()
         ossfs.invalidate_cache()
         bucket_infos = ossfs.ls("/")
         assert bucket_infos == []
         assert "cannot list buckets if not logged in" in caplog.text
     finally:
-        ossfs._auth = auth  # pylint:disable=protected-access
+        ossfs._auth = auth
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)

@@ -2,7 +2,6 @@
 Test class level functionality.
 """
 
-# pylint:disable=missing-function-docstring
 import pickle
 import time
 from multiprocessing.pool import ThreadPool
@@ -13,8 +12,7 @@ import pytest
 
 from ossfs import AioOSSFileSystem, OSSFileSystem
 from ossfs.base import BaseOSSFileSystem
-
-from ..conftest import function_name
+from tests.conftest import function_name
 
 
 @pytest.mark.parametrize("aio", [False, True])
@@ -26,7 +24,7 @@ def test_default_cache_type(
     data = b"a" * (10 * 2**20)
     file = path + "/test_default_cache_type/file"
     init_config["default_cache_type"] = default_cache_type
-    if aio:
+    if aio:  # noqa: SIM108
         ossfs = AioOSSFileSystem(**init_config)
     else:
         ossfs = OSSFileSystem(**init_config)
@@ -61,14 +59,14 @@ def test_cache_type(
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
 def test_current(ossfs: Union["OSSFileSystem", "AioOSSFileSystem"], init_config: Dict):
-    ossfs._cache.clear()  # pylint: disable=protected-access
+    ossfs._cache.clear()
     ossfs = OSSFileSystem(**init_config)
     assert ossfs.current() is ossfs
     assert OSSFileSystem.current() is ossfs
 
 
 def test_connect_many(init_config: Dict, test_bucket_name: str):
-    def task(num):  # pylint: disable=unused-argument
+    def task(num):
         ossfs = OSSFileSystem(**init_config)
         ossfs.ls(test_bucket_name)
         time.sleep(5)
@@ -99,12 +97,6 @@ def test_strip_protocol():
     Test protocols
     """
     address = "http://oss-cn-hangzhou.aliyuncs.com/mybucket/myobject"
-    assert (
-        BaseOSSFileSystem._strip_protocol(address)  # pylint: disable=protected-access
-        == "/mybucket/myobject"
-    )
+    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"
     address = "oss://mybucket/myobject"
-    assert (
-        BaseOSSFileSystem._strip_protocol(address)  # pylint: disable=protected-access
-        == "/mybucket/myobject"
-    )
+    assert BaseOSSFileSystem._strip_protocol(address) == "/mybucket/myobject"

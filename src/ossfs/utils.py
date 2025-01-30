@@ -1,4 +1,5 @@
 """utils of ossfs"""
+
 import copy
 import inspect
 from functools import wraps
@@ -12,20 +13,20 @@ def _copy_and_pretify_list(
     if not detail:
         for path_info in result_copy:
             if path.startswith("/"):
-                path_info["name"] = f'/{path_info["name"].lstrip("/")}'
+                path_info["name"] = f"/{path_info['name'].lstrip('/')}"
             else:
-                path_info["name"] = f'{path_info["name"].lstrip("/")}'
+                path_info["name"] = f"{path_info['name'].lstrip('/')}"
         final_results = sorted(info["name"] for info in result_copy)
     else:
         for path_info in result_copy:
             path_info["Size"] = path_info["size"]
             path_info["Key"] = path_info["name"]
             if path.startswith("/"):
-                path_info["name"] = f'/{path_info["name"].lstrip("/")}'
-                path_info["Key"] = f'/{path_info["Key"].lstrip("/")}'
+                path_info["name"] = f"/{path_info['name'].lstrip('/')}"
+                path_info["Key"] = f"/{path_info['Key'].lstrip('/')}"
             else:
-                path_info["name"] = f'{path_info["name"].lstrip("/")}'
-                path_info["Key"] = f'{path_info["Key"].lstrip("/")}'
+                path_info["name"] = f"{path_info['name'].lstrip('/')}"
+                path_info["Key"] = f"{path_info['Key'].lstrip('/')}"
         final_results = sorted(result_copy, key=lambda i: i["name"])
     return final_results
 
@@ -34,7 +35,7 @@ def _format_unify(path: str, result, detail: bool):
     if not result:
         return result
     if isinstance(result, dict):
-        for _, value in result.items():
+        for value in result.values():
             nested = isinstance(value, dict)
             break
         if nested:

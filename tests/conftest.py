@@ -1,8 +1,7 @@
 """
 Pytest setup
 """
-# pylint: disable=missing-function-docstring
-# pylint: disable=redefined-outer-name
+
 import inspect
 import os
 import pathlib
@@ -75,7 +74,7 @@ def test_directory() -> str:
     return f"ossfs_test/{test_id}"
 
 
-@pytest.fixture()
+@pytest.fixture
 def oss_emulator_server_start(emulator_endpoint):
     """
     Start a local emulator server
@@ -98,7 +97,7 @@ def init_config(endpoint) -> Dict:
     return result
 
 
-@pytest.fixture()
+@pytest.fixture
 def ossfs(request, init_config: Dict) -> Union["OSSFileSystem", "AioOSSFileSystem"]:
     if hasattr(request, "param") and request.param == "async":
         ossfs = AioOSSFileSystem(**init_config)

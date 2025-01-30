@@ -2,7 +2,6 @@
 Test all oss object related methods
 """
 
-# pylint:disable=missing-function-docstring
 import os
 import time
 from typing import TYPE_CHECKING, Union
@@ -10,7 +9,7 @@ from typing import TYPE_CHECKING, Union
 import fsspec
 import pytest
 
-from ..conftest import NUMBERS, bucket_relative_path, function_name
+from tests.conftest import NUMBERS, bucket_relative_path, function_name
 
 if TYPE_CHECKING:
     from oss2 import Bucket
@@ -307,7 +306,8 @@ def test_get_put(
 
     local_file = str(tmpdir.join("number"))
     data = os.urandom(size)
-    open(local_file, "wb").write(data)  # pylint:disable=consider-using-with
+    with open(local_file, "wb") as f_write:
+        f_write.write(data)
 
     remote_file = path + "file"
     ossfs.put(local_file, remote_file)
@@ -316,7 +316,8 @@ def test_get_put(
 
     get_file = str(tmpdir.join("get"))
     ossfs.get(remote_file, get_file)
-    assert open(get_file, "rb").read() == data  # pylint:disable=consider-using-with
+    with open(get_file, "rb") as f_read:
+        assert f_read.read() == data
 
 
 @pytest.mark.parametrize("ossfs", ["sync", "async"], indirect=True)
@@ -381,7 +382,7 @@ def test_get_directories(
     tmpdir_str = str(tmpdir)
     ossfs.get(path + "dir/", tmpdir_str, recursive=True)
     assert {"dirkey", "dir"} == set(os.listdir(tmpdir_str))
-    assert ["key"] == os.listdir(os.path.join(tmpdir_str, "dir"))
+    assert os.listdir(os.path.join(tmpdir_str, "dir")) == ["key"]
     assert {"key0", "key1"} == set(os.listdir(os.path.join(tmpdir_str, "dirkey")))
 
 
@@ -432,11 +433,11 @@ def test_find_file_info_with_selector(
     assert len(infos) == 4
 
     for info in infos.values():
-        if info["name"].endswith(file_a):
-            assert info["type"] == "file"
-        elif info["name"].endswith(file_b):
-            assert info["type"] == "file"
-        elif info["name"].endswith(file_c):
+        if (
+            info["name"].endswith(file_a)
+            or info["name"].endswith(file_b)
+            or info["name"].endswith(file_c)
+        ):
             assert info["type"] == "file"
         elif info["name"].rstrip("/").endswith(dir_a):
             assert info["type"] == "directory"
@@ -534,7 +535,6 @@ def test_get_put_file(
 
     data = b"test" * 2**20
 
-    # pylint: disable=missing-class-docstring
     class EventLogger(fsspec.Callback):
         def __init__(self):
             self.events = []

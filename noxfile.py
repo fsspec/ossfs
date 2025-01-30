@@ -1,4 +1,5 @@
 """Automation using nox."""
+
 import glob
 import os
 
@@ -31,12 +32,11 @@ def lint(session: nox.Session) -> None:
     args = *(session.posargs or ("--show-diff-on-failure",)), "--all-files"
     session.run("pre-commit", "run", *args)
     session.run("python", "-m", "mypy")
-    session.run("python", "-m", "pylint", *locations)
 
 
 @nox.session
 def build(session: nox.Session) -> None:
-    session.install("build", "setuptools", "twine")
+    session.install("build", "twine")
     session.run("python", "-m", "build")
     dists = glob.glob("dist/*")
     session.run("twine", "check", *dists, silent=True)
