@@ -467,12 +467,10 @@ class OSSFileSystem(BaseOSSFileSystem):
         if not obj_name or self.isdir(path):
             raise NotImplementedError("bucket has no modified timestamp")
         simplifiedmeta = self._call_oss("get_object_meta", obj_name, bucket=bucket_name)
-        return int(
-            datetime.strptime(  # noqa: DTZ007
-                simplifiedmeta.headers["Last-Modified"],
-                "%a, %d %b %Y %H:%M:%S %Z",
-            ).timestamp()
-        )
+        return datetime.strptime(  # noqa: DTZ007
+            simplifiedmeta.headers["Last-Modified"],
+            "%a, %d %b %Y %H:%M:%S %Z",
+        ).timestamp()
 
     def append_object(self, path: str, location: int, value: bytes) -> int:
         """
